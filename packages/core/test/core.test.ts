@@ -285,3 +285,42 @@ describe('validation et points', () => {
     expect(ledger.some((e) => e.kind === 'week')).toBe(true);
   });
 });
+
+import { BADGES, computeStats, levelInfo, weeklyQuests, xpForLevel } from '../src/index.ts';
+
+describe('gamification', () => {
+  const plan = buildPlan(tenK45);
+  const v = (id: string, score = 1) => ({ sessionId: id, status: 'validee' as const, score, volumeScore: 1, intensityScore: score, points: 100, feedback: '' });
+
+  it('les niveaux progressent et le titre évolue', () => {
+    expect(levelInfo(0).level).toBe(1);
+    expect(levelInfo(xpForLevel(5)).level).toBe(5);
+    expect(levelInfo(xpForLevel(5)).title).toBe('Coureur');
+    expect(levelInfo(xpForLevel(5) + 1).progress).toBeGreaterThan(0);
+  });
+
+  it('calcule XP, série et badges à partir des validations', () => {
+    const week1 = plan.sessions.filter((s) => s.week === 1);
+    const validations = Object.fromEntries(week1.map((s) => [s.id, v(s.id)]));
+    const stats = computeStats([{ plan, validations }], '2026-11-09');
+    expect(stats.sessionsDone).toBe(4);
+    expect(stats.streak).toBe(4);
+    expect(stats.weeksComplete).toBe(1);
+    expect(stats.perfectWeeks).toBe(1);
+    expect(stats.xp).toBeGreaterThan(500);
+    expect(BADGES.find((b) => b.id === 'week')!.progress(stats)).toBe(1);
+  });
+
+  it('une séance passée manquée casse la série', () => {
+    const [a, b, c] = plan.sessions;
+    const stats = computeStats([{ plan, validations: { [a.id]: v(a.id), [c.id]: v(c.id) } }], '2026-11-08');
+    expect(b.date < '2026-11-08').toBe(true);
+    expect(stats.streak).toBe(1);
+    expect(stats.bestStreak).toBe(1);
+  });
+
+  it('propose les défis de la semaine', () => {
+    const q = weeklyQuests([{ plan, validations: { w1s1: v('w1s1') } }], '2026-11-02');
+    expect(q[0]).toMatchObject({ id: 'all', current: 1, target: 4, done: false });
+  });
+});

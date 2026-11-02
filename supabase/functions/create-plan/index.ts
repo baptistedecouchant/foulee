@@ -26,7 +26,8 @@ Deno.serve(
     const plan = buildPlan(body);
     const db = adminClient();
 
-    await db.from('plans').update({ status: 'abandoned' }).eq('user_id', user.id).eq('status', 'active');
+    const { count } = await db.from('plans').select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('status', 'active');
+    if ((count ?? 0) >= 3) throw new HttpError(409, 'too_many_active_plans');
     const { data: row, error } = await db
       .from('plans')
       .insert({
@@ -39,6 +40,7 @@ Deno.serve(
         sessions_per_week: body.sessionsPerWeek,
         level: body.level,
         plan,
+        title: typeof (body as { title?: string }).title === 'string' ? (body as { title?: string }).title!.slice(0, 60) : null,
       })
       .select('id')
       .single();

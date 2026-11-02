@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 
+import { CelebrationOverlay } from '@/components/celebration';
 import { Colors } from '@/constants/theme';
 import { AppProvider, useStore } from '@/lib/store';
 
@@ -23,11 +24,13 @@ function Navigator() {
     <ThemeProvider
       value={{ ...base, colors: { ...base.colors, primary: c.accent, background: c.background, card: c.surface, text: c.text, border: c.line } }}>
       <StatusBar style="auto" />
-      <Stack screenOptions={{ headerBackTitle: 'Retour', headerTintColor: c.accent }}>
+      <Stack screenOptions={{ headerBackTitle: 'Retour', headerTintColor: c.accent, headerShadowVisible: false, headerTransparent: false }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="goal" options={{ presentation: 'modal', title: 'Mon objectif' }} />
-        <Stack.Screen name="session/[id]" options={{ title: 'Séance' }} />
+        <Stack.Screen name="goal" options={{ presentation: 'modal', title: 'Nouvel objectif' }} />
+        <Stack.Screen name="plan/[id]" options={{ title: '' }} />
+        <Stack.Screen name="session/[id]" options={{ title: '' }} />
       </Stack>
+      <CelebrationOverlay />
     </ThemeProvider>
   );
 }

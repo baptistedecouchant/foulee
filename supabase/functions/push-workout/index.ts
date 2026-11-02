@@ -8,10 +8,11 @@ import { toWatchWorkout, type PlannedSession, type WatchWorkout } from '../_shar
 Deno.serve(
   handle(async (req) => {
     const user = await requireUser(req);
-    const { sessionId } = await req.json();
+    const { planId, sessionId } = await req.json();
     const db = adminClient();
 
-    const { data: plan } = await db.from('plans').select('id').eq('user_id', user.id).eq('status', 'active').single();
+    const { data: plan } = await db.from('plans').select('id').eq('user_id', user.id).eq('id', planId).single();
+    if (!plan) throw new HttpError(404, 'plan_not_found');
     const { data: row } = await db
       .from('planned_sessions')
       .select('*')

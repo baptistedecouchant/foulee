@@ -7,3 +7,4 @@ export * from './dedupe.ts';
 export * from './scoring.ts';
 export * from './prompts.ts';
 export * from './watchExport.ts';
+export * from './gamification.ts';

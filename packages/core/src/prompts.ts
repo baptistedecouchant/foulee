@@ -69,3 +69,33 @@ Utilise les identifiants exacts des séances et des semaines, une entrée pour c
 PLAN
 ${planContext(plan)}`;
 }
+
+export interface HistoryEntry {
+  date: string;
+  objectif: string;
+  seance: string;
+  type: string;
+  statut: string;
+  score?: number;
+  allures_respectees_pct?: number;
+  volume_respecte_pct?: number;
+  distance_km?: number;
+  duree_min?: number;
+  allure_moy?: string;
+  fc_moy?: number;
+  remarque?: string;
+}
+
+/**
+ * Historique complet des séances du coureur, tous plans confondus, du plus récent au plus ancien.
+ * Les activités venues de Strava n'y figurent qu'avec leur statut de validation : les conditions
+ * de l'API Strava interdisent de transmettre leurs données à une IA.
+ */
+export function historyContext(entries: HistoryEntry[], stats?: Record<string, number>): string {
+  const sorted = [...entries].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 120);
+  return `HISTORIQUE DES SÉANCES (${entries.length} au total, les plus récentes d'abord)
+${JSON.stringify(sorted)}
+${stats ? `\nSTATISTIQUES\n${JSON.stringify(stats)}` : ''}
+
+Appuie-toi sur cet historique : régularité, séances manquées, allures trop rapides en endurance, progression. Cite des séances précises quand c'est utile.`;
+}

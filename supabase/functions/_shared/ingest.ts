@@ -104,31 +104,37 @@ export async function ingestActivity(db: SupabaseClient, userId: string, activit
       .eq('id', userId);
   }
 
-  // Rapprochement : séance prévue la plus proche, non encore validée.
-  const { data: planRow } = await db.from('plans').select('id, plan').eq('user_id', userId).eq('status', 'active').maybeSingle();
-  if (!planRow) return { status: trust.verdict === 'rejected' ? 'rejected' : 'no_session', activityId: inserted.id };
-  const plan = planRow.plan as Plan;
+  // Rapprochement : séance prévue la plus proche, non encore validée, tous entraînements actifs confondus.
+  const { data: planRows } = await db.from('plans').select('id, plan').eq('user_id', userId).eq('status', 'active').order('created_at');
+  if (!planRows?.length) return { status: trust.verdict === 'rejected' ? 'rejected' : 'no_session', activityId: inserted.id };
 
-  const { data: done } = await db.from('session_validations').select('session_id, status').eq('plan_id', planRow.id);
-  const alreadyOk = new Set((done ?? []).filter((d) => d.status === 'validee').map((d) => d.session_id));
-  const candidates = plan.sessions.filter((s) => !alreadyOk.has(s.id) && isInWindow(s, activity.startTime));
+  const { data: doneRows } = await db
+    .from('session_validations')
+    .select('plan_id, session_id, status, points')
+    .in('plan_id', planRows.map((p) => p.id));
+  const done = doneRows ?? [];
+  const candidates = planRows.flatMap((row) =>
+    (row.plan as Plan).sessions
+      .filter((s) => isInWindow(s, activity.startTime))
+      .filter((s) => !done.some((d) => d.plan_id === row.id && d.session_id === s.id && d.status === 'validee'))
+      .map((s) => ({ planId: row.id as string, plan: row.plan as Plan, s })),
+  );
   if (!candidates.length) return { status: trust.verdict === 'rejected' ? 'rejected' : 'no_session', activityId: inserted.id };
 
   const startDay = new Date(activity.startTime).toISOString().slice(0, 10);
-  const session: PlannedSession =
-    candidates.find((s) => s.date === startDay) ??
-    candidates.sort((a, b) => Math.abs(a.durationSec - activity.durationSec) - Math.abs(b.durationSec - activity.durationSec))[0];
+  const pick =
+    candidates.find((c) => c.s.date === startDay) ??
+    candidates.sort((a, b) => Math.abs(a.s.durationSec - activity.durationSec) - Math.abs(b.s.durationSec - activity.durationSec))[0];
+  const { planId, plan } = pick;
+  const session: PlannedSession = pick.s;
 
   const validation = evaluateSession(session, activity, trust);
 
   // Une meilleure exécution remplace une moins bonne, jamais l'inverse.
-  const prev = (done ?? []).find((d) => d.session_id === session.id);
-  const { data: prevRow } = prev
-    ? await db.from('session_validations').select('points').eq('plan_id', planRow.id).eq('session_id', session.id).single()
-    : { data: null };
+  const prevRow = done.find((d) => d.plan_id === planId && d.session_id === session.id);
   if (!prevRow || validation.points > prevRow.points) {
     await db.from('session_validations').upsert({
-      plan_id: planRow.id,
+      plan_id: planId,
       session_id: session.id,
       user_id: userId,
       activity_id: inserted.id,
@@ -141,7 +147,7 @@ export async function ingestActivity(db: SupabaseClient, userId: string, activit
     });
   }
 
-  await syncLedger(db, userId, planRow.id, plan);
+  await syncLedger(db, userId, planId, plan);
   return { status: trust.verdict === 'rejected' ? 'rejected' : 'stored', activityId: inserted.id, validation };
 }
 

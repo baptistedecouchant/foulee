@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import {
   addDays,
+  distanceLabel,
   assessGoal,
   formatPace,
   formatTime,
@@ -16,7 +17,8 @@ import {
 import { Button, Card, Row, Segmented, Txt } from '@/components/ui';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { formatDateFr, todayIso, useStore } from '@/lib/store';
+import { PhotoCard } from '@/components/visuals';
+import { formatDateFr, MAX_ACTIVE_PLANS, todayIso, useStore } from '@/lib/store';
 
 const DISTANCES = [
   { km: 5, label: '5 km' },
@@ -34,7 +36,7 @@ const LEVELS: Array<{ id: Extract<CurrentLevel, { kind: 'estimate' }>['level']; 
 
 export default function GoalScreen() {
   const t = useTheme();
-  const { createPlan } = useStore();
+  const { createPlan, plans } = useStore();
   const start = suggestedStartDate(todayIso());
 
   const [mode, setMode] = useState<GoalMode>('chrono');
@@ -87,8 +89,9 @@ export default function GoalScreen() {
     setSaving(true);
     setError(null);
     try {
-      await createPlan(request);
-      router.back();
+      const id = await createPlan(request);
+      router.dismiss();
+      router.push({ pathname: '/plan/[id]', params: { id } });
     } catch {
       setError('Le plan n’a pas pu être créé. Vérifie ta connexion et réessaie.');
     } finally {
@@ -101,6 +104,14 @@ export default function GoalScreen() {
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: t.background }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
+        <PhotoCard image={km >= 40 ? 'cityRace' : km >= 20 ? 'marathon' : mode === 'chrono' ? 'trackSunset' : 'road'} height={170}>
+          <Txt variant="label" color="rgba(255,255,255,0.8)">
+            Objectif {plans.length + 1} sur {MAX_ACTIVE_PLANS}
+          </Txt>
+          <Txt variant="display" color="#fff">
+            {mode === 'chrono' && targetSec && km > 0 ? `${distanceLabel(km)} en ${formatTime(targetSec)}` : `Finir : ${km > 0 ? distanceLabel(km) : '…'}`}
+          </Txt>
+        </PhotoCard>
         <Card>
           <Txt variant="label" muted>
             Ce que tu vises
@@ -257,9 +268,10 @@ export default function GoalScreen() {
 
         {error && <Txt color={t.bad}>{error}</Txt>}
         <Button
-          label={saving ? 'Création du plan…' : 'Créer mon plan'}
+          icon="rocket"
+          label={saving ? 'Création du plan…' : plans.length >= MAX_ACTIVE_PLANS ? `Maximum ${MAX_ACTIVE_PLANS} objectifs en parallèle` : 'Créer mon plan'}
           onPress={submit}
-          disabled={!request || assessment?.feasibility === 'delai_court' || saving}
+          disabled={!request || assessment?.feasibility === 'delai_court' || saving || plans.length >= MAX_ACTIVE_PLANS}
         />
       </ScrollView>
     </KeyboardAvoidingView>

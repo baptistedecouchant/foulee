@@ -1,43 +1,38 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
-import { Tabs } from 'expo-router';
-import type { ComponentProps } from 'react';
-import type { ColorValue } from 'react-native';
+import { NativeTabs } from 'expo-router/native-tabs';
 
 import { useTheme } from '@/hooks/use-theme';
 import { useStore } from '@/lib/store';
 
-type IconName = ComponentProps<typeof Ionicons>['name'];
-
+// Barre d'onglets native : sur iOS 26 elle prend automatiquement l'apparence Liquid Glass
+// (flottante, translucide, qui se rétracte au défilement).
 export default function TabsLayout() {
   const t = useTheme();
-  const { balance } = useStore();
-  const icon = (name: IconName) =>
-    function TabIcon({ color, size }: { color: ColorValue; size: number }) {
-      return <Ionicons name={name} color={color as string} size={size} />;
-    };
+  const { quests } = useStore();
+  const openQuests = quests.filter((q) => !q.done).length;
 
   return (
-    <Tabs
-      screenOptions={{
-        tabBarActiveTintColor: t.accent,
-        tabBarInactiveTintColor: t.textSecondary,
-        tabBarStyle: { backgroundColor: t.surface, borderTopColor: t.line },
-        headerStyle: { backgroundColor: t.background },
-        headerShadowVisible: false,
-        headerTitleStyle: { color: t.text, fontWeight: '800' },
-      }}>
-      <Tabs.Screen name="index" options={{ title: 'Mon plan', tabBarLabel: 'Plan', tabBarIcon: icon('calendar-outline') }} />
-      <Tabs.Screen name="coach" options={{ title: 'Coach', tabBarIcon: icon('chatbubble-ellipses-outline') }} />
-      <Tabs.Screen
-        name="rewards"
-        options={{
-          title: 'Récompenses',
-          tabBarIcon: icon('gift-outline'),
-          tabBarBadge: balance <= 0 ? undefined : balance < 1000 ? String(balance) : `${(balance / 1000).toFixed(1).replace('.', ',')}k`,
-          tabBarBadgeStyle: { backgroundColor: t.gold, color: t.goldText, fontSize: 10 },
-        }}
-      />
-      <Tabs.Screen name="devices" options={{ title: 'Montres', tabBarIcon: icon('watch-outline') }} />
-    </Tabs>
+    <NativeTabs tintColor={t.accent} minimizeBehavior="onScrollDown">
+      <NativeTabs.Trigger name="index">
+        <NativeTabs.Trigger.Label>Accueil</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf={{ default: 'flame', selected: 'flame.fill' }} md="local_fire_department" />
+        {openQuests > 0 ? <NativeTabs.Trigger.Badge>{String(openQuests)}</NativeTabs.Trigger.Badge> : null}
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="plans">
+        <NativeTabs.Trigger.Label>Entraînements</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="figure.run" md="directions_run" />
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="coach">
+        <NativeTabs.Trigger.Label>Coach</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf={{ default: 'bubble.left.and.bubble.right', selected: 'bubble.left.and.bubble.right.fill' }} md="forum" />
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="rewards">
+        <NativeTabs.Trigger.Label>Récompenses</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf={{ default: 'trophy', selected: 'trophy.fill' }} md="emoji_events" />
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="devices">
+        <NativeTabs.Trigger.Label>Montres</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="applewatch" md="watch" />
+      </NativeTabs.Trigger>
+    </NativeTabs>
   );
 }

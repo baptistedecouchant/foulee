@@ -1,194 +1,199 @@
-import { Link, router } from 'expo-router';
-import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { daysBetween, distanceLabel, formatDuration, formatPace, formatTime, type Phase, type PlannedSession } from '@foulee/core';
+import { router } from 'expo-router';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { BADGES, formatDuration } from '@foulee/core';
 
-import { Button, Card, Chip, IntensityProfile, Row, Txt } from '@/components/ui';
-import { Radius, Spacing } from '@/constants/theme';
+import { Button, Card, Chip, Ionicons, LevelBadge, ProgressBar, Row, SectionTitle, StatPill, Txt } from '@/components/ui';
+import { GradientCard, PhotoCard } from '@/components/visuals';
+import { Gradients, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { formatDateFr, todayIso, useStore } from '@/lib/store';
+import { useTopInset } from '@/hooks/use-top-inset';
+import { imageForSession } from '@/lib/images';
+import { BADGE_ICON, daysLeft, fmtInt, goalTitle, planProgress, SESSION_ICON } from '@/lib/labels';
+import { formatDateFr, MAX_ACTIVE_PLANS, todayIso, useStore } from '@/lib/store';
 
-const PHASE_LABEL: Record<Phase, string> = { base: 'Fondations', dev: 'Développement', spe: 'Spécifique', taper: 'Affûtage' };
-
-export default function PlanScreen() {
+export default function HomeScreen() {
   const t = useTheme();
-  const { plan, enrichment, validations } = useStore();
+  const top = useTopInset();
+  const { plans, stats, level, quests, balance } = useStore();
   const today = todayIso();
 
-  if (!plan) {
-    return (
-      <ScrollView style={{ backgroundColor: t.background }} contentContainerStyle={styles.page}>
-        <Card>
-          <Txt variant="display">Quel est ton prochain objectif ?</Txt>
-          <Txt muted>
-            Un chrono à battre ou une distance à finir. Foulée calcule ton plan, l’envoie sur ta montre, vérifie chaque séance et te
-            récompense quand tu la suis.
-          </Txt>
-          <Button label="Choisir mon objectif" onPress={() => router.push('/goal')} />
-        </Card>
-      </ScrollView>
-    );
-  }
+  // Prochaine séance à faire, tous entraînements confondus.
+  const next = plans
+    .flatMap((p) => p.plan.sessions.filter((s) => s.date >= today && !p.validations[s.id]).map((s) => ({ p, s })))
+    .sort((a, b) => a.s.date.localeCompare(b.s.date))[0];
 
-  const g = plan.request.goal;
-  const n = plan.weeks.length;
-  const currentWeek = Math.min(n, Math.max(1, Math.floor(daysBetween(plan.request.startDate, today) / 7) + 1));
-  const daysLeft = daysBetween(today, g.eventDate);
-  const weekVolumes = plan.weeks.map((w) => plan.sessions.filter((s) => s.week === w.n).reduce((a, s) => a + s.durationSec, 0));
-  const maxVol = Math.max(...weekVolumes);
+  const upcomingBadges = BADGES.map((b) => ({ b, v: b.progress(stats) }))
+    .filter((x) => x.v < 1)
+    .sort((a, b) => b.v - a.v)
+    .slice(0, 3);
 
   return (
-    <ScrollView style={{ backgroundColor: t.background }} contentContainerStyle={styles.page}>
-      <Card>
+    <ScrollView style={{ backgroundColor: t.background }} contentContainerStyle={[styles.page, { paddingTop: Spacing.l + top }]} contentInsetAdjustmentBehavior="automatic">
+      {/* ---------- Joueur : niveau, XP, série, points ---------- */}
+      <GradientCard colors={Gradients.night}>
         <Row style={{ justifyContent: 'space-between' }}>
-          <Txt variant="label" muted>
-            Objectif · {daysLeft > 0 ? `J-${daysLeft}` : daysLeft === 0 ? 'Jour J' : 'Terminé'}
-          </Txt>
-          <Link href="/goal" style={{ color: t.accent, fontWeight: '600' }}>
-            Changer
-          </Link>
+          <View style={{ gap: 2 }}>
+            <Txt variant="label" color="rgba(255,255,255,0.7)">
+              {formatDateFr(today, { weekday: 'long', day: 'numeric', month: 'long' })}
+            </Txt>
+            <Txt variant="display" color="#fff">
+              {next?.s.date === today ? 'Séance au programme !' : 'Prêt à courir ?'}
+            </Txt>
+          </View>
+          <LevelBadge level={level.level} />
         </Row>
-        <Txt variant="display">
-          {g.mode === 'chrono' && g.targetTimeSec ? `${distanceLabel(g.distanceKm)} en ${formatTime(g.targetTimeSec)}` : `Finir : ${distanceLabel(g.distanceKm)}`}
-        </Txt>
-        <Txt muted>
-          {g.mode === 'chrono' ? 'Allure' : 'Allure estimée'} {formatPace(plan.racePaceSecPerKm)} /km · {formatDateFr(g.eventDate, { weekday: 'long', day: 'numeric', month: 'long' })}
-        </Txt>
-
-        {/* Volume hebdomadaire : la périodisation du plan en un coup d'œil */}
-        <View style={styles.chart} accessibilityLabel={`Semaine ${currentWeek} sur ${n}`}>
-          {weekVolumes.map((v, i) => (
-            <View
-              key={i}
-              style={{
-                flex: 1,
-                height: 8 + (v / maxVol) * 56,
-                borderRadius: 3,
-                backgroundColor: i + 1 === currentWeek ? t.accent : i + 1 < currentWeek ? t.accentSoft : t.line,
-              }}
-            />
-          ))}
+        <View style={{ gap: 6 }}>
+          <Row style={{ justifyContent: 'space-between' }}>
+            <Txt variant="number" color="#fff">
+              {level.title}
+            </Txt>
+            <Txt variant="caption" color="rgba(255,255,255,0.75)">
+              {fmtInt(level.intoLevel)} / {fmtInt(level.levelSpan)} XP
+            </Txt>
+          </Row>
+          <ProgressBar value={level.progress} track="rgba(255,255,255,0.15)" />
         </View>
-        <Txt variant="caption" muted>
-          Semaine {currentWeek} sur {n} · {PHASE_LABEL[plan.weeks[currentWeek - 1].phase]}
-        </Txt>
+        <Row>
+          <StatPill icon="flame" value={`${stats.streak} série`} color="#fff" bg="rgba(255,106,43,0.9)" />
+          <StatPill icon="diamond" value={`${fmtInt(balance)} pts`} color={t.goldText} bg={t.gold} />
+          <StatPill icon="flash" value={`${fmtInt(stats.xp)} XP`} color="#04281B" bg={t.xp} />
+        </Row>
+      </GradientCard>
+
+      {/* ---------- Séance du jour / prochaine séance ---------- */}
+      {plans.length === 0 ? (
+        <PhotoCard image="road" height={300} onPress={() => router.push('/goal')}>
+          <Chip tone="glass" icon="sparkles" label="Commence ici" />
+          <Txt variant="display" color="#fff">
+            Fixe ton premier objectif
+          </Txt>
+          <Txt color="rgba(255,255,255,0.85)">Un chrono à battre ou une distance à finir. Ton plan est prêt en 30 secondes.</Txt>
+          <Button kind="gold" icon="add-circle" label="Choisir mon objectif" onPress={() => router.push('/goal')} />
+        </PhotoCard>
+      ) : next ? (
+        <>
+          <SectionTitle>{next.s.date === today ? 'Aujourd’hui' : 'Prochaine séance'}</SectionTitle>
+          <PhotoCard image={imageForSession(next.s.type)} height={260} onPress={() => router.push({ pathname: '/session/[id]', params: { id: next.s.id, plan: next.p.id } })}>
+            <Row>
+              <Chip tone="glass" icon={SESSION_ICON[next.s.type]} label={formatDateFr(next.s.date, { weekday: 'long', day: 'numeric' })} />
+              <Chip tone="gold" icon="diamond" label={`jusqu’à ${next.s.basePoints} pts`} />
+            </Row>
+            <Txt variant="display" color="#fff">
+              {next.s.title}
+            </Txt>
+            <Txt color="rgba(255,255,255,0.85)">
+              {formatDuration(next.s.durationSec)} · {(next.s.distanceM / 1000).toFixed(1).replace('.', ',')} km · {goalTitle(next.p.plan)}
+            </Txt>
+          </PhotoCard>
+        </>
+      ) : null}
+
+      {/* ---------- Défis de la semaine ---------- */}
+      {quests.length > 0 && (
+        <>
+          <SectionTitle>Défis de la semaine</SectionTitle>
+          <Card>
+            {quests.map((q) => (
+              <View key={q.id} style={{ gap: 8 }}>
+                <Row style={{ justifyContent: 'space-between' }}>
+                  <Row style={{ flex: 1 }}>
+                    <Ionicons name={q.done ? 'checkmark-circle' : 'ellipse-outline'} size={22} color={q.done ? t.xp : t.textSecondary} />
+                    <Txt style={{ flex: 1, fontWeight: '700' }}>{q.title}</Txt>
+                  </Row>
+                  <Chip tone={q.done ? 'xp' : 'accent'} icon="flash" label={`+${q.xp} XP`} />
+                </Row>
+                <Row>
+                  <View style={{ flex: 1 }}>
+                    <ProgressBar value={q.current / q.target} colors={q.done ? Gradients.xp : Gradients.energy} height={10} />
+                  </View>
+                  <Txt variant="number" muted>
+                    {q.current}/{q.target}
+                  </Txt>
+                </Row>
+              </View>
+            ))}
+          </Card>
+        </>
+      )}
+
+      {/* ---------- Mes entraînements ---------- */}
+      {plans.length > 0 && (
+        <>
+          <SectionTitle action={<Button kind="ghost" small label="Tout voir" onPress={() => router.push('/plans')} />}>Mes entraînements</SectionTitle>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: Spacing.m }}>
+            {plans.map((p) => {
+              const pr = planProgress(p);
+              const left = daysLeft(p.plan, today);
+              return (
+                <PhotoCard key={p.id} image={p.image} height={190} style={{ width: 250 }} onPress={() => router.push({ pathname: '/plan/[id]', params: { id: p.id } })}>
+                  <Chip tone="glass" label={left > 0 ? `J-${left}` : left === 0 ? 'Jour J' : 'Terminé'} />
+                  <Txt variant="title" color="#fff" numberOfLines={1}>
+                    {goalTitle(p.plan)}
+                  </Txt>
+                  <ProgressBar value={pr.ratio} height={8} track="rgba(255,255,255,0.25)" colors={Gradients.gold} />
+                  <Txt variant="caption" color="rgba(255,255,255,0.85)">
+                    {pr.done}/{pr.total} séances
+                  </Txt>
+                </PhotoCard>
+              );
+            })}
+            {plans.length < MAX_ACTIVE_PLANS && (
+              <View style={[styles.addCard, { borderColor: t.accent, backgroundColor: t.accentSoft }]}>
+                <Ionicons name="add-circle" size={40} color={t.accent} />
+                <Txt style={{ fontWeight: '800', textAlign: 'center' }} color={t.accent}>
+                  Nouvel objectif
+                </Txt>
+                <Button small label="Ajouter" onPress={() => router.push('/goal')} />
+              </View>
+            )}
+          </ScrollView>
+        </>
+      )}
+
+      {/* ---------- Prochains badges ---------- */}
+      <SectionTitle action={<Button kind="ghost" small label="Collection" onPress={() => router.push('/rewards')} />}>Prochains badges</SectionTitle>
+      <Card>
+        {upcomingBadges.map(({ b, v }) => (
+          <Row key={b.id} style={{ gap: Spacing.m }}>
+            <View style={[styles.badgeIcon, { backgroundColor: t.surfaceAlt }]}>
+              <Ionicons name={BADGE_ICON[b.icon]} size={22} color={t.textSecondary} />
+            </View>
+            <View style={{ flex: 1, gap: 4, minWidth: 0 }}>
+              <Txt style={{ fontWeight: '800' }}>{b.title}</Txt>
+              <Txt variant="caption" muted numberOfLines={1}>
+                {b.description}
+              </Txt>
+              <ProgressBar value={v} height={6} colors={Gradients.gold} />
+            </View>
+          </Row>
+        ))}
       </Card>
 
-      <CoachCard />
-
-      {plan.weeks.map((w) => (
-        <WeekBlock
-          key={w.n}
-          n={w.n}
-          title={`Semaine ${w.n} · ${PHASE_LABEL[w.phase]}`}
-          focus={enrichment?.weeks[w.n] ?? w.focus}
-          sessions={plan.sessions.filter((s) => s.week === w.n)}
-          initiallyOpen={w.n === currentWeek}
-          validations={validations}
-        />
-      ))}
+      {/* ---------- Totaux ---------- */}
+      <Row style={{ gap: Spacing.m }}>
+        <Total icon="map" value={`${stats.distanceKm.toFixed(0)} km`} label="parcourus" />
+        <Total icon="time" value={`${stats.hours.toFixed(0)} h`} label="d’effort" />
+        <Total icon="checkmark-done" value={String(stats.sessionsDone)} label="séances" />
+      </Row>
     </ScrollView>
   );
 }
 
-function CoachCard() {
+function Total({ icon, value, label }: { icon: 'map' | 'time' | 'checkmark-done'; value: string; label: string }) {
   const t = useTheme();
-  const { enrichment } = useStore();
-  if (enrichment) {
-    return (
-      <Card style={{ backgroundColor: t.accentSoft, borderColor: t.accentSoft }}>
-        <Txt variant="label" color={t.accent}>
-          Le mot du coach
-        </Txt>
-        <Txt>{enrichment.resume}</Txt>
-      </Card>
-    );
-  }
   return (
-    <Card>
-      <Txt variant="title">Personnalise ton plan avec le coach IA</Txt>
-      <Txt muted>Les allures et volumes sont calculés. Le coach ajoute des conseils et des repères nutrition pour chaque séance.</Txt>
-      <Button kind="secondary" label="Ouvrir le coach" onPress={() => router.push('/coach')} />
+    <Card style={{ flex: 1, alignItems: 'center', gap: 4, padding: Spacing.m }}>
+      <Ionicons name={icon} size={20} color={t.accent} />
+      <Txt variant="title">{value}</Txt>
+      <Txt variant="caption" muted>
+        {label}
+      </Txt>
     </Card>
   );
 }
 
-function WeekBlock(props: {
-  n: number;
-  title: string;
-  focus: string;
-  sessions: PlannedSession[];
-  initiallyOpen: boolean;
-  validations: ReturnType<typeof useStore>['validations'];
-}) {
-  const t = useTheme();
-  const [open, setOpen] = useState(props.initiallyOpen);
-  const total = props.sessions.reduce((a, s) => a + s.durationSec, 0);
-  const done = props.sessions.filter((s) => ['validee', 'partielle'].includes(props.validations[s.id]?.status ?? '')).length;
-
-  return (
-    <View style={{ gap: Spacing.s }}>
-      <Pressable accessibilityRole="button" accessibilityState={{ expanded: open }} onPress={() => setOpen(!open)}>
-        <Row style={{ justifyContent: 'space-between' }}>
-          <Txt variant="title">{props.title}</Txt>
-          <Txt variant="number" muted>
-            {done}/{props.sessions.length} · {formatDuration(total)}
-          </Txt>
-        </Row>
-        {open && (
-          <Txt variant="caption" muted>
-            {props.focus}
-          </Txt>
-        )}
-      </Pressable>
-      {open && props.sessions.map((s) => <SessionRow key={s.id} session={s} />)}
-    </View>
-  );
-}
-
-function SessionRow({ session }: { session: PlannedSession }) {
-  const t = useTheme();
-  const { validations, sent } = useStore();
-  const v = validations[session.id];
-  const past = session.date < todayIso();
-
-  let chip = <Chip label="À faire" />;
-  if (v?.status === 'validee') chip = <Chip tone="ok" label={`Validée · +${v.points} pts`} />;
-  else if (v?.status === 'partielle') chip = <Chip tone="warn" label={`Partielle · +${v.points} pts`} />;
-  else if (v?.status === 'refusee') chip = <Chip tone="bad" label="Refusée" />;
-  else if (v?.status === 'non_validee') chip = <Chip tone="bad" label="Non validée" />;
-  else if (v?.status === 'en_revue') chip = <Chip tone="warn" label="En vérification" />;
-  else if (past) chip = <Chip tone="bad" label="Manquée" />;
-  else if (sent[session.id]) chip = <Chip tone="accent" label="Sur ta montre" />;
-
-  return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={() => router.push(`/session/${session.id}`)}
-      style={({ pressed }) => [styles.session, { backgroundColor: t.surface, borderColor: t.line, opacity: pressed ? 0.8 : 1 }]}>
-      <View style={styles.date}>
-        <Txt variant="label" muted>
-          {formatDateFr(session.date, { weekday: 'short' })}
-        </Txt>
-        <Txt variant="title">{formatDateFr(session.date, { day: 'numeric' })}</Txt>
-      </View>
-      <View style={{ flex: 1, gap: 6, minWidth: 0 }}>
-        <Txt style={{ fontWeight: '700' }} numberOfLines={1}>
-          {session.title}
-        </Txt>
-        <Txt variant="caption" muted>
-          {formatDuration(session.durationSec)} · {(session.distanceM / 1000).toFixed(1).replace('.', ',')} km
-        </Txt>
-        <IntensityProfile steps={session.steps} height={22} />
-        {chip}
-      </View>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
-  page: { padding: Spacing.l, gap: Spacing.l, paddingBottom: Spacing.xxl },
-  chart: { flexDirection: 'row', alignItems: 'flex-end', gap: 4, height: 64, marginTop: Spacing.s },
-  session: { flexDirection: 'row', gap: Spacing.m, padding: Spacing.m, borderRadius: Radius.m, borderWidth: StyleSheet.hairlineWidth },
-  date: { width: 44, alignItems: 'center' },
+  page: { padding: Spacing.l, gap: Spacing.l, paddingBottom: 120 },
+  addCard: { width: 170, height: 190, borderRadius: Radius.l, borderWidth: 2, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', gap: Spacing.s, padding: Spacing.m },
+  badgeIcon: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
 });

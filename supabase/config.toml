@@ -1,0 +1,17 @@
+# Extrait de configuration Supabase pour Foulée (compléter avec `supabase init` si besoin).
+project_id = "foulee"
+
+[auth]
+# Connexion anonyme : l'utilisateur commence sans créer de compte,
+# il pourra ensuite lier un e-mail ou Apple/Google.
+enable_anonymous_sign_ins = true
+
+# Fonctions appelées par des serveurs tiers ou un navigateur, sans jeton utilisateur.
+[functions.strava-callback]
+verify_jwt = false
+
+[functions.strava-webhook]
+verify_jwt = false
+
+[functions.garmin-webhook]
+verify_jwt = false

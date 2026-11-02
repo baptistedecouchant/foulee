@@ -3,10 +3,13 @@ import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { formatDuration, formatPace, toWatchWorkout, ZONE_LABELS, type Step } from '@foulee/core';
 
-import { Button, Card, Chip, IntensityProfile, Row, Txt } from '@/components/ui';
+import { Button, Card, Chip, Ionicons, IntensityProfile, Row, Txt } from '@/components/ui';
+import { PhotoCard } from '@/components/visuals';
 import { Fonts, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { SCENARIOS } from '@/lib/demo';
+import { imageForSession } from '@/lib/images';
+import { goalTitle, SESSION_ICON } from '@/lib/labels';
 import { formatDateFr, useStore } from '@/lib/store';
 import { isDemo } from '@/lib/supabase';
 
@@ -22,17 +25,24 @@ const SOURCE_LABEL: Record<string, string> = { garmin: 'Garmin', apple_health: '
 
 export default function SessionScreen() {
   const t = useTheme();
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const { plan, enrichment, validations, sent, connections, sendToWatch, simulateSync, resetSession } = useStore();
+  const { id, plan: planId } = useLocalSearchParams<{ id: string; plan: string }>();
+  const { getPlan, connections, sendToWatch, simulateSync, resetSession } = useStore();
   const [sending, setSending] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [showJson, setShowJson] = useState(false);
 
-  const session = plan?.sessions.find((s) => s.id === id);
-  if (!session) return <Txt>Séance introuvable.</Txt>;
+  const entry = getPlan(planId);
+  const session = entry?.plan.sessions.find((s) => s.id === id);
+  if (!entry || !session) {
+    return (
+      <View style={{ flex: 1, padding: Spacing.l, backgroundColor: t.background }}>
+        <Txt>Séance introuvable.</Txt>
+      </View>
+    );
+  }
 
-  const v = validations[session.id];
-  const ai = enrichment?.sessions[session.id];
+  const v = entry.validations[session.id];
+  const ai = entry.enrichment?.sessions[session.id];
   const watchConnected = connections.garmin || connections.apple_health;
   const anyConnected = Object.values(connections).some(Boolean);
 
@@ -40,74 +50,27 @@ export default function SessionScreen() {
     <ScrollView style={{ backgroundColor: t.background }} contentContainerStyle={styles.page}>
       <Stack.Screen options={{ title: formatDateFr(session.date, { weekday: 'long', day: 'numeric', month: 'long' }) }} />
 
-      <Card>
-        <Txt variant="display">{session.title}</Txt>
-        <Txt muted>
-          {formatDuration(session.durationSec)} · {(session.distanceM / 1000).toFixed(1).replace('.', ',')} km · jusqu’à {session.basePoints} pts
+      <PhotoCard image={imageForSession(session.type)} height={280}>
+        <Row>
+          <Chip tone="glass" icon={SESSION_ICON[session.type]} label={goalTitle(entry.plan)} />
+          <Chip tone="gold" icon="diamond" label={`jusqu’à ${session.basePoints} pts`} />
+        </Row>
+        <Txt variant="hero" color="#fff">
+          {session.title}
         </Txt>
-        <IntensityProfile steps={session.steps} height={56} />
-      </Card>
-
-      <Card>
-        <Txt variant="label" muted>
-          Déroulé
+        <Txt color="rgba(255,255,255,0.9)">
+          {formatDuration(session.durationSec)} · {(session.distanceM / 1000).toFixed(1).replace('.', ',')} km
         </Txt>
-        <StepList steps={session.steps} />
-      </Card>
-
-      <Card>
-        <Txt variant="label" muted>
-          {ai ? 'Conseil du coach' : 'Conseil'}
-        </Txt>
-        <Txt>{ai?.tip ?? session.tip}</Txt>
-        <Txt variant="label" muted>
-          Nutrition
-        </Txt>
-        <Txt>{ai?.nutrition ?? session.nutrition}</Txt>
-      </Card>
-
-      <Card>
-        <Txt variant="label" muted>
-          Sur ta montre
-        </Txt>
-        {sent[session.id] ? (
-          <Txt color={t.ok}>Séance envoyée. Lance-la depuis ta montre : elle te guidera bloc par bloc.</Txt>
-        ) : watchConnected ? (
-          <Button
-            kind="secondary"
-            label={sending ? 'Envoi…' : `Envoyer sur ${connections.garmin ? 'Garmin' : 'Apple Watch'}`}
-            disabled={sending}
-            onPress={async () => {
-              setSending(true);
-              try {
-                await sendToWatch(session.id);
-              } catch {
-                setMessage('L’envoi a échoué. Réessaie dans un instant.');
-              } finally {
-                setSending(false);
-              }
-            }}
-          />
-        ) : (
-          <Txt muted>Connecte une Garmin ou une Apple Watch dans l’onglet Montres pour y envoyer la séance.</Txt>
-        )}
-        <Button kind="secondary" label={showJson ? 'Masquer le format montre' : 'Voir le format envoyé à la montre'} onPress={() => setShowJson(!showJson)} />
-        {showJson && (
-          <View style={[styles.code, { backgroundColor: t.background, borderColor: t.line }]}>
-            <Txt variant="caption" style={{ fontFamily: Fonts.mono }}>
-              {JSON.stringify(toWatchWorkout(session), null, 2)}
-            </Txt>
-          </View>
-        )}
-      </Card>
+        <IntensityProfile steps={session.steps} height={46} color="#FFFFFF" />
+      </PhotoCard>
 
       {v && (
-        <Card style={{ borderColor: t[STATUS[v.status].tone], borderWidth: 1.5 }}>
+        <Card style={{ borderColor: t[STATUS[v.status].tone], borderWidth: 2 }}>
           <Row style={{ justifyContent: 'space-between' }}>
             <Txt variant="title" color={t[STATUS[v.status].tone]}>
               {STATUS[v.status].label}
             </Txt>
-            {v.points > 0 && <Chip tone="gold" label={`+${v.points} pts`} />}
+            {v.points > 0 && <Chip tone="gold" icon="diamond" label={`+${v.points} pts`} />}
           </Row>
           <Txt>{v.feedback}</Txt>
           {v.status !== 'refusee' && (
@@ -117,59 +80,123 @@ export default function SessionScreen() {
               <Metric label="Confiance" value={`${v.trust.trustScore}/100`} />
             </Row>
           )}
-          <Txt variant="caption" muted>
-            Reçue via {SOURCE_LABEL[v.source] ?? v.source}
-          </Txt>
+          {v.source ? (
+            <Txt variant="caption" muted>
+              Reçue via {SOURCE_LABEL[v.source] ?? v.source}
+            </Txt>
+          ) : null}
           {v.trust.flags.length > 0 && (
             <View style={{ gap: 4 }}>
               <Txt variant="label" muted>
                 Contrôles GPS et capteurs
               </Txt>
               {v.trust.flags.map((f, i) => (
-                <Txt key={i} variant="caption" color={f.severity === 'critical' ? t.bad : f.severity === 'warning' ? t.warn : t.textSecondary}>
-                  • {f.message}
-                </Txt>
+                <Row key={i} style={{ alignItems: 'flex-start' }}>
+                  <Ionicons
+                    name={f.severity === 'critical' ? 'shield' : f.severity === 'warning' ? 'warning' : 'information-circle'}
+                    size={16}
+                    color={f.severity === 'critical' ? t.bad : f.severity === 'warning' ? t.warn : t.textSecondary}
+                  />
+                  <Txt variant="caption" style={{ flex: 1 }}>
+                    {f.message}
+                  </Txt>
+                </Row>
               ))}
             </View>
           )}
-          {isDemo && <Button kind="secondary" label="Effacer ce résultat (démo)" onPress={() => resetSession(session.id)} />}
+          {isDemo && <Button kind="ghost" small icon="refresh" label="Effacer ce résultat (démo)" onPress={() => resetSession(entry.id, session.id)} />}
         </Card>
       )}
 
-      {isDemo && (
-        <Card>
+      <Card>
+        <Txt variant="label" muted>
+          Déroulé
+        </Txt>
+        <StepList steps={session.steps} />
+      </Card>
+
+      <Card>
+        <Row>
+          <Ionicons name={ai ? 'sparkles' : 'bulb'} size={18} color={t.violet} />
           <Txt variant="label" muted>
-            Démo : simuler l’activité reçue
+            {ai ? 'Conseil du coach' : 'Conseil'}
           </Txt>
+        </Row>
+        <Txt>{ai?.tip ?? session.tip}</Txt>
+        <Row>
+          <Ionicons name="nutrition" size={18} color={t.xp} />
+          <Txt variant="label" muted>
+            Nutrition
+          </Txt>
+        </Row>
+        <Txt>{ai?.nutrition ?? session.nutrition}</Txt>
+      </Card>
+
+      <Card>
+        <Row>
+          <Ionicons name="watch" size={18} color={t.accent} />
+          <Txt variant="label" muted>
+            Sur ta montre
+          </Txt>
+        </Row>
+        {entry.sent[session.id] ? (
+          <Txt color={t.ok}>Séance envoyée. Lance-la depuis ta montre : elle te guidera bloc par bloc.</Txt>
+        ) : watchConnected ? (
+          <Button
+            icon="paper-plane"
+            label={sending ? 'Envoi…' : `Envoyer sur ${connections.garmin ? 'Garmin' : 'Apple Watch'}`}
+            disabled={sending}
+            onPress={async () => {
+              setSending(true);
+              setError(null);
+              try {
+                await sendToWatch(entry.id, session.id);
+              } catch {
+                setError('L’envoi a échoué. Réessaie dans un instant.');
+              } finally {
+                setSending(false);
+              }
+            }}
+          />
+        ) : (
+          <Txt muted>Connecte une Garmin ou une Apple Watch dans l’onglet Montres pour y envoyer la séance.</Txt>
+        )}
+        {error && <Txt color={t.bad}>{error}</Txt>}
+        <Button kind="ghost" small icon="code-slash" label={showJson ? 'Masquer le format montre' : 'Voir le format envoyé à la montre'} onPress={() => setShowJson(!showJson)} />
+        {showJson && (
+          <View style={[styles.code, { backgroundColor: t.surfaceAlt }]}>
+            <Txt variant="caption" style={{ fontFamily: Fonts.mono }}>
+              {JSON.stringify(toWatchWorkout(session), null, 2)}
+            </Txt>
+          </View>
+        )}
+      </Card>
+
+      {isDemo && (
+        <Card style={{ borderStyle: 'dashed', borderWidth: 1.5, borderColor: t.accent }}>
+          <Row>
+            <Ionicons name="flask" size={18} color={t.accent} />
+            <Txt variant="label" color={t.accent}>
+              Démo : simuler l’activité reçue
+            </Txt>
+          </Row>
           {anyConnected ? (
             <>
               <Txt variant="caption" muted>
                 L’activité passe par les mêmes contrôles anti-triche et la même validation que sur le serveur.
               </Txt>
-              <Row style={{ flexWrap: 'wrap' }}>
+              <View style={styles.grid}>
                 {SCENARIOS.map((s) => (
-                  <View key={s.id} style={{ flexBasis: '47%', flexGrow: 1 }}>
-                    <Button
-                      kind="secondary"
-                      label={s.label}
-                      onPress={() => {
-                        const r = simulateSync(session.id, s.id);
-                        setMessage(r ? (r.points > 0 ? `+${r.points} points` : STATUS[r.status].label) : null);
-                      }}
-                    />
+                  <View key={s.id} style={styles.gridItem}>
+                    <Button kind={s.id === 'conforme' ? 'primary' : 'secondary'} small label={s.label} onPress={() => simulateSync(entry.id, session.id, s.id)} />
                   </View>
                 ))}
-              </Row>
+              </View>
             </>
           ) : (
             <Txt muted>Connecte d’abord une montre ou une app dans l’onglet Montres.</Txt>
           )}
         </Card>
-      )}
-      {message && (
-        <Txt color={t.accent} style={{ textAlign: 'center', fontWeight: '700' }}>
-          {message}
-        </Txt>
       )}
     </ScrollView>
   );
@@ -178,17 +205,17 @@ export default function SessionScreen() {
 function StepList({ steps, nested }: { steps: Step[]; nested?: boolean }) {
   const t = useTheme();
   return (
-    <View style={{ gap: 8, paddingLeft: nested ? Spacing.m : 0, borderLeftWidth: nested ? 2 : 0, borderLeftColor: t.accentSoft }}>
+    <View style={{ gap: 10, paddingLeft: nested ? Spacing.m : 0, borderLeftWidth: nested ? 3 : 0, borderLeftColor: t.accentSoft }}>
       {steps.map((s, i) =>
         s.kind === 'repeat' ? (
-          <View key={i} style={{ gap: 6 }}>
-            <Txt style={{ fontWeight: '700' }}>{s.times} ×</Txt>
+          <View key={i} style={{ gap: 8 }}>
+            <Chip tone="accent" icon="repeat" label={`${s.times} fois`} />
             <StepList steps={s.steps} nested />
           </View>
         ) : (
           <Row key={i} style={{ justifyContent: 'space-between' }}>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Txt style={{ fontWeight: '600' }}>{s.label ?? ZONE_LABELS[s.zone]}</Txt>
+              <Txt style={{ fontWeight: '700' }}>{s.label ?? ZONE_LABELS[s.zone]}</Txt>
               <Txt variant="caption" muted>
                 {s.durationSec != null
                   ? s.durationSec >= 60
@@ -215,12 +242,14 @@ function Metric({ label, value }: { label: string; value: string }) {
       <Txt variant="label" muted>
         {label}
       </Txt>
-      <Txt variant="number">{value}</Txt>
+      <Txt variant="title">{value}</Txt>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  page: { padding: Spacing.l, gap: Spacing.l, paddingBottom: Spacing.xxl },
-  code: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 8, padding: Spacing.m },
+  page: { padding: Spacing.l, gap: Spacing.l, paddingBottom: 60 },
+  code: { borderRadius: 12, padding: Spacing.m },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.s },
+  gridItem: { flexBasis: '48%', flexGrow: 1 },
 });
