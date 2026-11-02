@@ -51,7 +51,10 @@ jobs:
           # Serveur : si ces secrets existent, l'app quitte le mode démo.
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_PROJECT_REF != '' && format('https://{0}.supabase.co', secrets.SUPABASE_PROJECT_REF) || '' }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-        run: eas update --branch preview --message "${MESSAGE%%$'\n'*}" --non-interactive
+        run: |
+          # Canal « preview » relié à la branche « preview » : le lien fixe d'Expo Go suit toujours la dernière version.
+          eas channel:create preview --non-interactive 2>/dev/null || true
+          eas update --branch preview --message "${MESSAGE%%$'\n'*}" --non-interactive
 
       - name: Aperçu web (toujours en mode démo)
         working-directory: apps/mobile
