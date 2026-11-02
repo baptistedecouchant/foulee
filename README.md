@@ -24,6 +24,11 @@ cd apps/mobile && npx expo start
 
 Sans backend configuré, l'app tourne en **mode démo** : tout est calculé sur le téléphone, et chaque séance propose de simuler l'activité reçue (séance bien suivie, trop rapide, écourtée, saisie à la main, trajet en voiture, GPS falsifié) pour voir les contrôles anti-triche à l'œuvre.
 
+## Documentation
+
+- [docs/PARAMETRES.md](docs/PARAMETRES.md) : tous les réglages, composant par composant
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) : choix techniques et sécurité
+
 ## Activer Strava et le coach IA
 
 Guide pas à pas : [docs/ACTIVER-STRAVA.md](docs/ACTIVER-STRAVA.md).
