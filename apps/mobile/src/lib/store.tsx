@@ -9,6 +9,7 @@ import {
   buildPlan,
   evaluateSession,
   type Activity,
+  type Athlete,
   type SessionValidation,
   applyCaps,
   chestEarnings,
@@ -90,6 +91,8 @@ interface PersistedState {
   checkins: string[];
   /** Astuces du jour lues (identifiant = date). */
   tipsRead: string[];
+  /** Profil sportif saisi en mode démo (en ligne : il vit dans la fiche du compte). */
+  athlete?: Athlete;
   /** Solde serveur (mode connecté). */
   serverBalance?: number;
   /** Historique serveur des gains (mode connecté). */
@@ -177,6 +180,7 @@ interface Store extends PersistedState {
   removePlan(id: string): void;
   setEnrichment(planId: string, e: Enrichment): void;
   setConnection(p: Provider, on: boolean): void;
+  setLocalAthlete(a: Athlete): void;
   connectStrava(): Promise<'connected' | 'cancelled' | 'error' | string>;
   sendToWatch(planId: string, sessionId: string): Promise<void>;
   simulateSync(planId: string, sessionId: string, scenario: Scenario): DemoResult | null;
@@ -505,6 +509,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setState((s) => ({ ...s, plans: s.plans.filter((p) => p.id !== id) }));
     },
     setEnrichment: (planId, e) => updatePlan(planId, (p) => ({ ...p, enrichment: e })),
+    setLocalAthlete: (a) => setState((s) => ({ ...s, athlete: a })),
     setConnection: (p, on) => setState((s) => ({ ...s, connections: { ...s.connections, [p]: on } })),
     connectStrava: async () => {
       // Le secret Strava reste sur le serveur : l'app ouvre juste la page d'autorisation.

@@ -81,15 +81,32 @@ describe('objectif', () => {
     expect(parseTime('abc')).toBeNull();
   });
 
-  it('10 km en 45 min depuis 49:30 en 10 semaines : réaliste mais exigeant', () => {
-    const a = assessGoal(tenK45.goal, tenK45.level, START);
+  it('10 km en 45 min depuis 49:30 en 10 semaines : exigeant à 4 séances, plus dur à 2', () => {
+    const a = assessGoal(tenK45.goal, tenK45.level, START, { sessionsPerWeek: 4 });
     expect(a.weeks).toBe(10);
     expect(a.feasibility).toBe('exigeant');
+    const b = assessGoal(tenK45.goal, tenK45.level, START, { sessionsPerWeek: 2 });
+    expect(['tres_ambitieux', 'peu_probable']).toContain(b.feasibility);
+    expect(b.confidence).toBeLessThan(a.confidence);
+  });
+
+  it('l’âge et la corpulence réduisent la progression attendue', () => {
+    const jeune = assessGoal(tenK45.goal, tenK45.level, START, { sessionsPerWeek: 4, athlete: { age: 28, weightKg: 70, heightCm: 178 } });
+    const senior = assessGoal(tenK45.goal, tenK45.level, START, { sessionsPerWeek: 4, athlete: { age: 58, weightKg: 98, heightCm: 175 } });
+    expect(senior.confidence).toBeLessThan(jeune.confidence);
+    expect(senior.achievable.likelySec).toBeGreaterThan(jeune.achievable.likelySec);
+  });
+
+  it('propose trois chronos (prudent, réaliste, ambitieux) et le niveau requis', () => {
+    const a = assessGoal(tenK45.goal, tenK45.level, START, { sessionsPerWeek: 3 });
+    expect(a.suggestions.map((x) => x.label)).toEqual(['Prudent', 'Réaliste', 'Ambitieux']);
+    expect(a.suggestions[0].timeSec).toBeGreaterThan(a.suggestions[2].timeSec);
+    expect(a.level).toBe('intermédiaire');
   });
 
   it('propose un temps réaliste quand le chrono visé est hors de portée', () => {
     const a = assessGoal({ ...tenK45.goal, targetTimeSec: 38 * 60 }, tenK45.level, START);
-    expect(a.feasibility).toBe('trop_ambitieux');
+    expect(a.feasibility).toBe('peu_probable');
     expect(a.suggestedTimeSec).toBeGreaterThan(38 * 60);
   });
 
@@ -108,7 +125,21 @@ describe('objectif', () => {
       { kind: 'estimate', level: 'occasionnel' },
       START,
     );
-    expect(a.feasibility).toBe('realiste');
+    expect(['realiste', 'tres_probable']).toContain(a.feasibility);
+  });
+
+  it('accepte une séance par semaine et des jours choisis', () => {
+    const p = buildPlan({ ...tenK45, sessionsPerWeek: 1, trainingDays: [5] });
+    expect(p.sessions.filter((s) => s.week === 1)).toHaveLength(1);
+    expect(p.sessions.at(-1)!.type).toBe('race');
+    const q = buildPlan({ ...tenK45, sessionsPerWeek: 3, trainingDays: [0, 2, 5] });
+    const w1 = q.sessions.filter((s) => s.week === 1).map((s) => s.date);
+    expect(w1).toEqual(['2026-11-02', '2026-11-04', '2026-11-07']);
+  });
+
+  it('un objectif irréaliste ne fait pas s’entraîner à une allure impossible', () => {
+    const p = buildPlan({ ...tenK45, goal: { ...tenK45.goal, targetTimeSec: 36 * 60 } });
+    expect(p.racePaceSecPerKm).toBeGreaterThan(36 * 6);
   });
 });
 
@@ -286,7 +317,7 @@ describe('validation et points', () => {
   });
 });
 
-import { BADGES, computeStats, levelInfo, weeklyQuests, xpForLevel } from '../src/index.ts';
+import { BADGE_XP, BADGES, computeStats, levelInfo, weeklyQuests, xpForLevel } from '../src/index.ts';
 
 describe('gamification', () => {
   const plan = buildPlan(tenK45);
@@ -309,6 +340,17 @@ describe('gamification', () => {
     expect(stats.perfectWeeks).toBe(1);
     expect(stats.xp).toBeGreaterThan(500);
     expect(BADGES.find((b) => b.id === 'week')!.progress(stats)).toBe(1);
+    // Premier pas (bronze), Sur ta lancée ? non (4 séances), Semaine bouclée (bronze), Métronome (argent)
+    expect(stats.badgeXp).toBe(BADGE_XP.bronze * 2 + BADGE_XP.argent);
+    expect(stats.weekStreak).toBe(1);
+  });
+
+  it('compte les semaines d’affilée avec au moins une séance', () => {
+    const one = (w: number) => plan.sessions.find((s) => s.week === w)!;
+    const validations = Object.fromEntries([1, 2, 3, 5].map((w) => [one(w).id, v(one(w).id)]));
+    const stats = computeStats([{ plan, validations }], one(5).date);
+    expect(stats.bestWeekStreak).toBe(3);
+    expect(stats.weekStreak).toBe(1);
   });
 
   it('une séance passée manquée casse la série', () => {

@@ -78,6 +78,11 @@ export interface Stats {
   /** Série en cours : séances validées d'affilée, sans séance passée manquée. */
   streak: number;
   bestStreak: number;
+  /** Semaines d'affilée (lundi → dimanche) avec au moins une séance validée, en cours. */
+  weekStreak: number;
+  bestWeekStreak: number;
+  /** XP gagnée grâce aux badges débloqués (déjà comprise dans `xp`). */
+  badgeXp: number;
 }
 
 export function computeStats(plans: PlanProgress[], todayIso: string): Stats {
@@ -96,6 +101,9 @@ export function computeStats(plans: PlanProgress[], todayIso: string): Stats {
     refused: 0,
     streak: 0,
     bestStreak: 0,
+    weekStreak: 0,
+    bestWeekStreak: 0,
+    badgeXp: 0,
   };
 
   const timeline: Array<{ date: string; ok: boolean; pending: boolean }> = [];
@@ -143,14 +151,42 @@ export function computeStats(plans: PlanProgress[], todayIso: string): Stats {
     }
   }
   s.streak = run;
+
+  // Semaines d'affilée avec au moins une séance. La semaine en cours ne casse pas la série
+  // tant qu'elle n'est pas finie.
+  const weeksOk = new Set(timeline.filter((e) => e.ok).map((e) => mondayOf(e.date)));
+  const sorted = [...weeksOk].sort();
+  let wr = 0;
+  let prev = '';
+  for (const w of sorted) {
+    wr = prev && addDaysIso(prev, 7) === w ? wr + 1 : 1;
+    s.bestWeekStreak = Math.max(s.bestWeekStreak, wr);
+    prev = w;
+  }
+  const thisWeek = mondayOf(todayIso);
+  const lastWeek = addDaysIso(thisWeek, -7);
+  s.weekStreak = prev === thisWeek || prev === lastWeek ? wr : 0;
+
   s.distanceKm = Math.round(s.distanceKm * 10) / 10;
   s.hours = Math.round(s.hours * 10) / 10;
+
+  // Les badges rapportent de l'XP (jamais de RunCoins).
+  s.badgeXp = BADGES.filter((b) => b.progress(s) >= 1).reduce((sum, b) => sum + BADGE_XP[b.tier], 0);
+  s.xp += s.badgeXp;
   return s;
+}
+
+function mondayOf(iso: string): string {
+  const d = new Date(iso + 'T12:00:00Z');
+  return addDaysIso(iso.slice(0, 10), -((d.getUTCDay() + 6) % 7));
 }
 
 // ---------- Badges ----------
 
 export type BadgeTier = 'bronze' | 'argent' | 'or';
+
+/** XP offerte par un badge selon son rang. Les badges ne donnent pas de RunCoins. */
+export const BADGE_XP: Record<BadgeTier, number> = { bronze: 50, argent: 120, or: 300 };
 
 export interface Badge {
   id: string;

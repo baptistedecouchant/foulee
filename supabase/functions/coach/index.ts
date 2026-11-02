@@ -8,6 +8,7 @@ import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import { z } from 'zod';
 import { adminClient, handle, HttpError, json, requireUser } from '../_shared/supabase.ts';
 import {
+  athleteContext,
   buildEnrichPrompt,
   COACH_SYSTEM_PROMPT,
   computeStats,
@@ -133,7 +134,8 @@ Deno.serve(
       const lvl = levelInfo(stats.xp);
 
       const context = `CONTEXTE DU COUREUR (aujourd'hui : ${today()})
-Niveau ${lvl.level} (${lvl.title}), série en cours : ${stats.streak} séances.
+Niveau ${lvl.level} (${lvl.title}), série en cours : ${stats.streak} séances, ${stats.weekStreak} semaine(s) d'affilée avec au moins une séance.
+${active[0] ? `Profil sportif (objectif principal) :\n${athleteContext(active[0].plan as Plan)}` : ''}
 Entraînements en cours :
 ${active.map((r) => `- ${goalSummary(r.plan as Plan)} : ${planContext(r.plan as Plan)}`).join('\n') || 'aucun'}
 

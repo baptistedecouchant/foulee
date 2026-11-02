@@ -16,19 +16,22 @@ export function PhotoCard({
   height = 200,
   onPress,
   style,
+  contentStyle,
 }: {
   image: ImageKey;
   children: ReactNode;
   height?: number;
   onPress?: () => void;
   style?: StyleProp<ViewStyle>;
+  /** Style du contenu (ex. `{ flex: 1 }` pour placer des éléments en haut de l'image). */
+  contentStyle?: StyleProp<ViewStyle>;
 }) {
   const content = (
     <View style={[styles.photo, { height }, style]}>
       <LinearGradient colors={IMAGE_FALLBACK[image]} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
       <Image source={{ uri: imageUri(image) }} style={StyleSheet.absoluteFill} contentFit="cover" transition={300} cachePolicy="disk" accessibilityIgnoresInvertColors />
       <LinearGradient colors={Gradients.shade} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0.15 }} end={{ x: 0, y: 1 }} />
-      <View style={styles.photoContent}>{children}</View>
+      <View style={[styles.photoContent, contentStyle]}>{children}</View>
     </View>
   );
   return onPress ? (

@@ -41,9 +41,6 @@ export default function HomeScreen() {
             </Txt>
           </View>
           <Row>
-            <Pressable accessibilityRole="button" accessibilityLabel="Mon compte" onPress={() => router.push('/account')} style={styles.watchBtn}>
-              <Ionicons name="person" size={20} color="#fff" />
-            </Pressable>
             <Pressable accessibilityRole="button" accessibilityLabel="Montres et apps" onPress={() => router.push('/devices')} style={styles.watchBtn}>
               <Ionicons name="watch" size={22} color="#fff" />
             </Pressable>
@@ -65,7 +62,7 @@ export default function HomeScreen() {
           <StatPill icon="flame" value={`${stats.streak} série`} color="#fff" bg="rgba(255,106,43,0.9)" />
           <StatPill icon="calendar" value={`${loginDays} j`} color="#fff" bg="rgba(255,255,255,0.18)" />
           <StatPill icon="cash" value={`${fmtInt(balance)} RC`} color={t.goldText} bg={t.gold} />
-          <StatPill icon="flash" value={`${fmtInt(stats.xp)} XP`} color="#04281B" bg={t.xp} />
+          <StatPill icon="flash" value={`${fmtInt(level.xp)} XP`} color="#04281B" bg={t.xp} />
         </Row>
       </GradientCard>
 

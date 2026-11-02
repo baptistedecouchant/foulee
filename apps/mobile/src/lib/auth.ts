@@ -25,6 +25,8 @@ export interface Profile {
   birthDate: string | null; // AAAA-MM-JJ
   termsAccepted: boolean;
   healthConsent: boolean;
+  weightKg: number | null;
+  heightCm: number | null;
   email: string | null;
   providers: string[];
 }
@@ -186,7 +188,7 @@ export async function loadProfile(): Promise<Profile | null> {
   if (!u.user) return null;
   const { data: p } = await supabase
     .from('profiles')
-    .select('first_name, last_name, birth_date, terms_accepted_at, health_consent_at')
+    .select('first_name, last_name, birth_date, terms_accepted_at, health_consent_at, weight_kg, height_cm')
     .eq('id', u.user.id)
     .maybeSingle();
   return {
@@ -195,6 +197,8 @@ export async function loadProfile(): Promise<Profile | null> {
     birthDate: p?.birth_date ?? null,
     termsAccepted: Boolean(p?.terms_accepted_at),
     healthConsent: Boolean(p?.health_consent_at),
+    weightKg: p?.weight_kg != null ? Number(p.weight_kg) : null,
+    heightCm: p?.height_cm ?? null,
     email: u.user.email ?? null,
     providers: (u.user.identities ?? []).map((i) => i.provider),
   };
@@ -220,6 +224,18 @@ export async function completeProfile(p: { firstName: string; lastName: string; 
     .eq('id', data.user.id);
   if (error) throw error;
 }
+
+/** Poids et taille : servent à adapter la charge d'entraînement et l'estimation de progression. */
+export async function saveBodyMetrics(m: { weightKg: number | null; heightCm: number | null }) {
+  const sb = client();
+  const { data } = await sb.auth.getUser();
+  if (!data.user) throw new Error('not_signed_in');
+  const { error } = await sb.from('profiles').update({ weight_kg: m.weightKg, height_cm: m.heightCm }).eq('id', data.user.id);
+  if (error) throw error;
+}
+
+export const weightError = (w: number | null) => (w != null && (w < 25 || w > 250) ? 'Poids entre 25 et 250 kg' : null);
+export const heightError = (h: number | null) => (h != null && (h < 100 || h > 230) ? 'Taille entre 100 et 230 cm' : null);
 
 export async function signOut() {
   await client().auth.signOut();

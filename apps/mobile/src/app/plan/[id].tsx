@@ -8,15 +8,30 @@ import { GradientCard, PhotoCard } from '@/components/visuals';
 import { Gradients, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { goalTitle, planProgress, SESSION_ICON } from '@/lib/labels';
-import { formatDateFr, todayIso, useStore, type PlanEntry } from '@/lib/store';
+import { formatDateFr, todayIso, useStore, type Enrichment, type PlanEntry } from '@/lib/store';
+import { callFunction, isDemo } from '@/lib/supabase';
 
 const PHASE_LABEL: Record<Phase, string> = { base: 'Fondations', dev: 'Développement', spe: 'Spécifique', taper: 'Affûtage' };
 
 export default function PlanScreen() {
   const t = useTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { getPlan, removePlan } = useStore();
+  const { getPlan, removePlan, setEnrichment } = useStore();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [enriching, setEnriching] = useState(false);
+  const [enrichError, setEnrichError] = useState<string | null>(null);
+
+  const enrich = async () => {
+    setEnriching(true);
+    setEnrichError(null);
+    try {
+      setEnrichment(id, await callFunction<Enrichment>('coach', { action: 'enrich', planId: id }));
+    } catch {
+      setEnrichError('La personnalisation a échoué. Réessaie dans un instant.');
+    } finally {
+      setEnriching(false);
+    }
+  };
   const entry = getPlan(id);
   const today = todayIso();
 
@@ -79,6 +94,7 @@ export default function PlanScreen() {
             </Txt>
           </Row>
           <Txt color="#fff">{entry.enrichment.resume}</Txt>
+          {!isDemo && <Button kind="secondary" small icon="chatbubbles" label="Poser une question au coach" onPress={() => router.push('/coach')} />}
         </GradientCard>
       ) : (
         <Card>
@@ -86,8 +102,21 @@ export default function PlanScreen() {
             <Ionicons name="sparkles" size={20} color={t.violet} />
             <Txt variant="title">Coach IA</Txt>
           </Row>
-          <Txt muted>Les allures et volumes sont calculés. Le coach ajoute des conseils et des repères nutrition pour chaque séance.</Txt>
-          <Button kind="secondary" icon="chatbubbles" label="Ouvrir le coach" onPress={() => router.push('/coach')} />
+          <Txt muted>
+            Les allures et volumes sont calculés pour toi. Le coach relit ton profil (âge, corpulence, chrono récent, jours dispo) et ajoute un conseil et un
+            repère nutrition à chaque séance.
+          </Txt>
+          {isDemo ? (
+            <Txt variant="caption" muted>
+              Disponible quand l’app est reliée au serveur.
+            </Txt>
+          ) : (
+            <>
+              <Button icon="sparkles" label={enriching ? 'Le coach prépare ton plan… (30 à 60 s)' : 'Personnaliser avec le coach'} disabled={enriching} onPress={enrich} />
+              <Button kind="ghost" small icon="chatbubbles" label="Poser une question au coach" onPress={() => router.push('/coach')} />
+            </>
+          )}
+          {enrichError && <Txt color={t.bad}>{enrichError}</Txt>}
         </Card>
       )}
 

@@ -3,7 +3,14 @@
 // "facile" avec des séances gonflées en points.
 
 import { adminClient, handle, HttpError, json, requireUser } from '../_shared/supabase.ts';
-import { assessGoal, buildPlan, type PlanRequest } from '../_shared/core/index.ts';
+import { assessGoal, buildPlan, type Athlete, type PlanRequest } from '../_shared/core/index.ts';
+
+function ageOf(iso: string, today = new Date()): number {
+  const [y, m, d] = iso.split('-').map(Number);
+  let a = today.getUTCFullYear() - y;
+  if (today.getUTCMonth() + 1 < m || (today.getUTCMonth() + 1 === m && today.getUTCDate() < d)) a--;
+  return a;
+}
 
 Deno.serve(
   handle(async (req) => {
@@ -17,14 +24,24 @@ Deno.serve(
       const pace = (g.targetTimeSec ?? 0) / g.distanceKm;
       if (!(pace >= 150 && pace <= 720)) throw new HttpError(400, 'invalid_target_time');
     }
-    if (![2, 3, 4, 5].includes(body.sessionsPerWeek)) throw new HttpError(400, 'invalid_sessions');
+    if (![1, 2, 3, 4, 5].includes(body.sessionsPerWeek)) throw new HttpError(400, 'invalid_sessions');
+    const days = Array.isArray(body.trainingDays) ? [...new Set(body.trainingDays.map(Number))].filter((d) => Number.isInteger(d) && d >= 0 && d <= 6).sort() : undefined;
+    const trainingDays = days && days.length === body.sessionsPerWeek ? days : undefined;
 
-    const assessment = assessGoal(g, body.level, body.startDate);
-    if (assessment.feasibility === 'delai_court') throw new HttpError(422, 'not_enough_weeks');
-    if (assessment.weeks > 24) throw new HttpError(422, 'too_many_weeks');
-
-    const plan = buildPlan(body);
+    // Profil sportif lu sur le serveur (âge, poids, taille) : il ajuste la charge et l'estimation.
     const db = adminClient();
+    const { data: prof } = await db.from('profiles').select('birth_date, weight_kg, height_cm').eq('id', user.id).maybeSingle();
+    const athlete: Athlete = {
+      age: prof?.birth_date ? ageOf(prof.birth_date) : undefined,
+      weightKg: prof?.weight_kg ? Number(prof.weight_kg) : undefined,
+      heightCm: prof?.height_cm ?? undefined,
+    };
+
+    // On ne bloque jamais un objectif ambitieux : on prévient et le plan reste prudent.
+    const assessment = assessGoal(g, body.level, body.startDate, { sessionsPerWeek: body.sessionsPerWeek, athlete });
+    if (assessment.weeks > 30) throw new HttpError(422, 'too_many_weeks');
+
+    const plan = buildPlan({ goal: g, level: body.level, sessionsPerWeek: body.sessionsPerWeek, startDate: body.startDate, trainingDays, athlete });
 
     const { count } = await db.from('plans').select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('status', 'active');
     if ((count ?? 0) >= 3) throw new HttpError(409, 'too_many_active_plans');
@@ -38,6 +55,7 @@ Deno.serve(
         event_date: g.eventDate,
         start_date: body.startDate,
         sessions_per_week: body.sessionsPerWeek,
+        training_days: trainingDays ?? null,
         level: body.level,
         plan,
         title: typeof (body as { title?: string }).title === 'string' ? (body as { title?: string }).title!.slice(0, 60) : null,

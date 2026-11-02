@@ -5,6 +5,7 @@ import type {
   PaceRange,
   Phase,
   Plan,
+  SessionsPerWeek,
   PlanRequest,
   PlanWeek,
   PlannedSession,
@@ -12,11 +13,12 @@ import type {
   Step,
   Zone,
 } from './types.ts';
-import { currentPace10k, riegel } from './goal.ts';
+import { athleteFactor, currentPace10k, maxRealisticGain, riegel } from './goal.ts';
 import { addDays, daysBetween, distanceLabel, formatTime, weeksUntil } from './time.ts';
 
 /** Jours d'entraînement (0 = lundi) selon le nombre de séances. */
-const DAY_SETS: Record<2 | 3 | 4 | 5, number[]> = {
+export const DAY_SETS: Record<SessionsPerWeek, number[]> = {
+  1: [6],
   2: [2, 6],
   3: [1, 3, 6],
   4: [1, 3, 5, 6],
@@ -145,16 +147,18 @@ function phaseOf(w: number, n: number, taper: number, spec: number, base: number
   return 'spe';
 }
 
-function weekTypes(sessions: 2 | 3 | 4 | 5, phase: Phase): SessionType[] {
+function weekTypes(sessions: SessionsPerWeek, phase: Phase, w: number): SessionType[] {
   const q1: SessionType = phase === 'base' ? 'fartlek' : phase === 'dev' ? 'vma' : 'spe';
   const q2: SessionType = phase === 'base' || phase === 'taper' ? 'lignes' : 'seuil';
-  const map: Record<2 | 3 | 4 | 5, SessionType[]> = {
+  // Une seule séance par semaine : on alterne sortie longue et séance de qualité.
+  if (sessions === 1) return [phase === 'base' || w % 2 === 0 ? 'sl' : phase === 'dev' ? 'fartlek' : 'spe'];
+  const map: Record<Exclude<SessionsPerWeek, 1>, SessionType[]> = {
     2: [q1, 'sl'],
     3: [q1, q2, 'sl'],
     4: [q1, 'ef', q2, 'sl'],
     5: ['ef', q1, 'ef', q2, 'sl'],
   };
-  return [...map[sessions]];
+  return [...map[sessions as Exclude<SessionsPerWeek, 1>]];
 }
 
 const round5 = (min: number) => Math.round(min / 5) * 5;
@@ -171,15 +175,24 @@ export function buildPlan(req: PlanRequest): Plan {
   const n = Math.max(1, weeksUntil(req.startDate, goal.eventDate));
   const p10 = currentPace10k(req.level);
 
-  const goalP10 = chrono ? riegel(goal.targetTimeSec!, D, 10) / 10 : p10 * (1 - Math.min(0.005 * n, 0.06));
-  const racePace = chrono ? goal.targetTimeSec! / D : riegel(goalP10 * 10, 10, D) / D;
+  // Les allures d'entraînement progressent vers l'objectif, sans jamais dépasser ce qui est
+  // physiologiquement atteignable dans le délai (objectif très ambitieux = entraînement prudent).
+  const reachable = maxRealisticGain(n, N, p10, req.athlete) * 1.1;
+  const goalP10Wanted = chrono ? riegel(goal.targetTimeSec!, D, 10) / 10 : p10 * (1 - Math.min(0.005 * n, 0.06));
+  const goalP10 = Math.max(goalP10Wanted, p10 * (1 - reachable));
+  const racePace = chrono ? Math.max(goal.targetTimeSec! / D, riegel(goalP10 * 10, 10, D) / D) : riegel(goalP10 * 10, 10, D) / D;
+  const af = athleteFactor(req.athlete);
+  const cautious = af < 0.9;
 
   const taper = D > 30 ? 2 : 1;
   const spec = Math.max(1, Math.round(n * 0.25));
   const base = Math.max(1, Math.round(n * 0.3));
 
-  const startMin = N * (p10 > 420 ? 30 : p10 > 360 ? 38 : p10 > 300 ? 45 : 52);
-  const peakMin = startMin * 1.6;
+  // Volume de départ par séance selon le niveau ; plus prudent si âge ou corpulence l'imposent.
+  const perSession = p10 > 420 ? 30 : p10 > 360 ? 38 : p10 > 300 ? 45 : 52;
+  const startMin = N * perSession * (cautious ? 0.85 : 1) * (N === 1 ? 1.4 : 1);
+  const peakMin = startMin * (cautious ? 1.45 : 1.6);
+  const ramp = cautious ? 1.05 : 1.07;
   const slCap = D <= 5 ? 70 : D <= 10 ? 85 : D <= 21.2 ? 125 : 190;
   const raceDow = clamp(daysBetween(addDays(req.startDate, (n - 1) * 7), goal.eventDate), 0, 6);
 
@@ -196,7 +209,7 @@ export function buildPlan(req: PlanRequest): Plan {
     else if (deload) vol = cur * 0.78;
     else {
       vol = cur;
-      cur = Math.min(cur * 1.07, peakMin);
+      cur = Math.min(cur * ramp, peakMin);
     }
 
     const fit = p10 + (goalP10 - p10) * (n > 1 ? w / (n - 1) : 1);
@@ -222,10 +235,13 @@ export function buildPlan(req: PlanRequest): Plan {
     while (phaseEnd < n - 1 && phaseOf(phaseEnd + 1, n, taper, spec, base) === phase) phaseEnd++;
     const t = phaseEnd > phaseStart ? (w - phaseStart) / (phaseEnd - phaseStart) : 0;
 
-    let types = weekTypes(N, phase);
-    let days = DAY_SETS[N];
+    let types = weekTypes(N, phase, w);
+    // Jours choisis par l'utilisateur (la sortie longue tombe sur le dernier jour de la semaine choisi).
+    const chosen = (req.trainingDays ?? []).filter((d) => d >= 0 && d <= 6);
+    let days = chosen.length === N ? [...new Set(chosen)].sort((a, b) => a - b) : DAY_SETS[N];
+    if (days.length !== N) days = DAY_SETS[N];
     if (last) {
-      const before = days.filter((d) => d < raceDow).slice(-(N - 1));
+      const before = N === 1 ? [] : days.filter((d) => d < raceDow).slice(-(N - 1));
       // semaine de course : une séance courte à allure, des footings, la veille des accélérations
       types = before.map((_, i): SessionType => (i === before.length - 1 ? 'lignes' : i === 0 ? 'spe' : 'ef'));
       types.push('race');

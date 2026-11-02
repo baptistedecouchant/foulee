@@ -7,7 +7,6 @@ import { Button, Card, Chip, Ionicons, Row, Txt } from '@/components/ui';
 import { GradientCard } from '@/components/visuals';
 import { Gradients, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { useTopInset } from '@/hooks/use-top-inset';
 import { goalTitle } from '@/lib/labels';
 import { useStore, type Enrichment } from '@/lib/store';
 import { callFunction, isDemo } from '@/lib/supabase';
@@ -23,7 +22,6 @@ const SUGGESTIONS = [
 
 export default function CoachScreen() {
   const t = useTheme();
-  const top = useTopInset();
   const { plans, stats, setEnrichment } = useStore();
   const [messages, setMessages] = useState<Msg[]>([]);
   const [draft, setDraft] = useState('');
@@ -65,7 +63,7 @@ export default function CoachScreen() {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: t.background }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView ref={scroll} contentContainerStyle={[styles.page, { paddingTop: Spacing.l + top }]} contentInsetAdjustmentBehavior="automatic">
+      <ScrollView ref={scroll} contentContainerStyle={styles.page} contentInsetAdjustmentBehavior="automatic">
         <GradientCard colors={Gradients.energy}>
           <Row>
             <View style={styles.avatar}>
@@ -168,10 +166,10 @@ export default function CoachScreen() {
 }
 
 const styles = StyleSheet.create({
-  page: { padding: Spacing.l, gap: Spacing.m, paddingBottom: 140 },
+  page: { padding: Spacing.l, gap: Spacing.m, paddingBottom: Spacing.xl },
   avatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
   bubble: { maxWidth: '86%', borderRadius: Radius.m, padding: Spacing.m },
   suggestion: { borderWidth: 1.5, borderRadius: Radius.m, padding: Spacing.m },
-  composer: { padding: Spacing.m, paddingBottom: Spacing.m + 70, borderTopWidth: StyleSheet.hairlineWidth },
+  composer: { padding: Spacing.m, paddingBottom: Spacing.xl, borderTopWidth: StyleSheet.hairlineWidth },
   input: { flex: 1, borderWidth: 1, borderRadius: Radius.m, paddingHorizontal: Spacing.m, paddingVertical: 10, maxHeight: 120, fontSize: 16 },
 });

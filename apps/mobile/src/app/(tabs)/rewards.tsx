@@ -10,16 +10,9 @@ import { useTheme } from '@/hooks/use-theme';
 import { useTopInset } from '@/hooks/use-top-inset';
 import type { ImageKey } from '@/lib/images';
 import { BADGE_ICON, fmtInt } from '@/lib/labels';
+import { CATALOG } from '@/lib/rewards';
 import { useStore } from '@/lib/store';
 
-// Catalogue de démonstration (partenaires fictifs). En production : table `rewards`,
-// chaque article étant un code ou un lien affilié tracké du partenaire.
-const CATALOG: Array<{ id: string; title: string; partner: string; cost: number; image: ImageKey }> = [
-  { id: 'remise-10', title: '-10 % sur ta prochaine commande', partner: 'Boutique running partenaire', cost: 2000, image: 'shoes' },
-  { id: 'dossard', title: '-15 % sur un dossard', partner: 'Organisateur de course', cost: 4000, image: 'cityRace' },
-  { id: 'bon-5', title: "Bon d'achat 5 €", partner: 'Enseigne de sport partenaire', cost: 5000, image: 'road' },
-  { id: 'bon-10', title: "Bon d'achat 10 €", partner: 'Enseigne de sport partenaire', cost: 10000, image: 'trail' },
-];
 
 const TIER: Record<BadgeTier, readonly [string, string]> = {
   bronze: ['#E7A36B', '#B5652E'],
@@ -35,13 +28,13 @@ type Tab = 'boutique' | 'gagner' | 'badges' | 'historique';
 export default function RewardsScreen() {
   const t = useTheme();
   const top = useTopInset();
-  const { balance, ledger, redemptions, redeem, stats, room, adsMode, watchAd } = useStore();
+  const { balance, ledger, redemptions, redeem, stats, level, room, adsMode, watchAd } = useStore();
   const [tab, setTab] = useState<Tab>('boutique');
   const [confirm, setConfirm] = useState<string | null>(null);
   const [adOpen, setAdOpen] = useState(false);
   const [adResolver, setAdResolver] = useState<((ok: boolean) => void) | null>(null);
   const [adMsg, setAdMsg] = useState<string | null>(null);
-  const next = CATALOG.filter((r) => r.cost > balance).sort((a, b) => a.cost - b.cost)[0];
+  const next = CATALOG.filter((r) => r.cost > balance && level.level >= (r.minLevel ?? 1)).sort((a, b) => a.cost - b.cost)[0];
   const unlocked = BADGES.filter((b) => b.progress(stats) >= 1).length;
 
   const playDemoAd = () =>
@@ -103,12 +96,16 @@ export default function RewardsScreen() {
       {tab === 'boutique' && (
         <>
           {CATALOG.map((r) => {
-            const affordable = balance >= r.cost;
+            const locked = level.level < (r.minLevel ?? 1);
+            const affordable = balance >= r.cost && !locked;
             return (
               <PhotoCard key={r.id} image={r.image} height={170}>
                 <Row style={{ justifyContent: 'space-between' }}>
                   <Chip tone="glass" label={r.partner} />
-                  <Chip tone={affordable ? 'gold' : 'glass'} icon="cash" label={`${fmtInt(r.cost)} RC`} />
+                  <Row style={{ gap: 6 }}>
+                    {r.minLevel ? <Chip tone={locked ? 'glass' : 'xp'} icon="flash" label={`Niv. ${r.minLevel}`} /> : null}
+                    <Chip tone={affordable ? 'gold' : 'glass'} icon="cash" label={`${fmtInt(r.cost)} RC`} />
+                  </Row>
                 </Row>
                 <Txt variant="title" color="#fff">
                   {r.title}
@@ -131,7 +128,14 @@ export default function RewardsScreen() {
                     </View>
                   </Row>
                 ) : (
-                  <Button kind={affordable ? 'gold' : 'secondary'} small icon={affordable ? 'gift' : 'lock-closed'} label={affordable ? 'Échanger' : 'Pas encore assez de RC'} disabled={!affordable} onPress={() => setConfirm(r.id)} />
+                  <Button
+                    kind={affordable ? 'gold' : 'secondary'}
+                    small
+                    icon={affordable ? 'gift' : 'lock-closed'}
+                    label={affordable ? 'Échanger' : locked ? `Débloqué au niveau ${r.minLevel} (XP)` : 'Pas encore assez de RC'}
+                    disabled={!affordable}
+                    onPress={() => setConfirm(r.id)}
+                  />
                 )}
               </PhotoCard>
             );
@@ -194,7 +198,8 @@ export default function RewardsScreen() {
               ['Pub vidéo regardée', `+${ECONOMY.adReward} RC`],
               ['Bonus de bienvenue (compte créé + 1re séance validée)', `+${ECONOMY.welcomeBonus} RC`],
               ['Coffre : 7 jours de connexion d’affilée', `+${ECONOMY.streakChest} RC`],
-              ['Défis entre amis, badges, objectif atteint', 'XP'],
+              ['Badges (bronze, argent, or)', 'XP'],
+              ['Défis entre amis, objectif atteint', 'XP'],
               ['Saisie manuelle ou trace suspecte', '0'],
             ].map(([k, v]) => (
               <Row key={k} style={{ justifyContent: 'space-between' }}>

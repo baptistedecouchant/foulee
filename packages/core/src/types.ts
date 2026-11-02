@@ -22,12 +22,24 @@ export type CurrentLevel =
   | { kind: 'race'; distanceKm: number; timeSec: number }
   | { kind: 'estimate'; level: 'debutant' | 'occasionnel' | 'regulier' | 'confirme' };
 
+export type SessionsPerWeek = 1 | 2 | 3 | 4 | 5;
+
+/** Profil physique du coureur : affine la faisabilité et la progression du plan. */
+export interface Athlete {
+  age?: number;
+  weightKg?: number;
+  heightCm?: number;
+}
+
 export interface PlanRequest {
   goal: Goal;
   level: CurrentLevel;
-  sessionsPerWeek: 2 | 3 | 4 | 5;
+  sessionsPerWeek: SessionsPerWeek;
   /** Lundi de la première semaine (AAAA-MM-JJ). */
   startDate: string;
+  /** Jours d'entraînement choisis (0 = lundi … 6 = dimanche). Sinon : répartition par défaut. */
+  trainingDays?: number[];
+  athlete?: Athlete;
 }
 
 export type Zone = 'ef' | 'sl' | 'rec' | 'seuil' | 'vma' | 'fart' | 'spe';
