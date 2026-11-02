@@ -1,0 +1,57 @@
+# Publication automatique à chaque envoi sur `main` :
+#  1. tests du moteur
+#  2. mise à jour de l'app pour Expo Go (EAS Update, branche « preview »)
+#  3. aperçu web (EAS Hosting)
+# Nécessite le secret de dépôt EXPO_TOKEN (expo.dev → Access tokens).
+
+name: Publier l'aperçu
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: publish
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Installer les dépendances
+        run: npm ci
+
+      - name: Tests du moteur
+        run: npm test
+
+      - name: Installer EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Lier le projet Expo
+        working-directory: apps/mobile
+        run: |
+          eas init --non-interactive --force
+          node ../../scripts/ci-configure-expo.mjs
+
+      - name: Mise à jour pour Expo Go
+        working-directory: apps/mobile
+        env:
+          MESSAGE: ${{ github.event.head_commit.message || 'Publication manuelle' }}
+        run: eas update --branch preview --message "${MESSAGE%%$'\n'*}" --non-interactive
+
+      - name: Aperçu web
+        working-directory: apps/mobile
+        run: |
+          npx expo export --platform web
+          eas deploy --prod --non-interactive
