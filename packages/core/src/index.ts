@@ -13,3 +13,4 @@ export * from './nutrition.ts';
 export * from './challenges.ts';
 export * from './hub.ts';
 export * from './economy.ts';
+export * from './tips.ts';

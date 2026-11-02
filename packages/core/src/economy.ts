@@ -22,6 +22,13 @@ export const ECONOMY = {
    */
   adReward: 10,
   sponsoredChallenge: 200, // challenge de la semaine financé par une marque
+  /**
+   * Bonus de bienvenue = 0,10 €. Versé une seule fois, APRÈS la première séance validée
+   * et seulement pour un compte relié (e-mail, Google ou Apple) : créer des faux comptes ne rapporte rien.
+   */
+  welcomeBonus: 100,
+  /** Coffre de la série de connexion : tous les 7 jours d'affilée = 0,02 €. */
+  streakChest: 20,
 
   /** Plafonds (anti-faillite et anti-abus) */
   caps: {
@@ -37,7 +44,7 @@ export const ECONOMY = {
   },
 } as const;
 
-export type EarnKind = 'session' | 'week' | 'ad' | 'sponsored';
+export type EarnKind = 'session' | 'week' | 'ad' | 'sponsored' | 'welcome' | 'chest';
 
 export interface Earning {
   kind: EarnKind;
@@ -95,6 +102,8 @@ export function applyCaps(earnings: Earning[]): GrantedEarning[] {
       ],
       sponsored: [[`p:w:${week}`, c.sponsoredPerWeek]],
       week: [[`k:w:${week}`, 1]],
+      welcome: [['welcome', 1]], // une fois par compte
+      chest: [[`c:w:${week}`, 1]], // un coffre par semaine au plus
     };
     let amount = e.amount;
     if (quota[e.kind].some(([k, max]) => (count.get(k) ?? 0) >= max)) {
@@ -185,3 +194,40 @@ export function sponsoredProgress(c: SponsoredChallenge, runs: Array<{ startTime
   if (c.metric === 'longest') return Math.round(Math.max(0, ...r.map((x) => x.distanceM)) / 100) / 10;
   return Math.round(r.reduce((a, x) => a + x.distanceM, 0) / 100) / 10;
 }
+
+// ---------- Série de connexion (ouvrir l'app chaque jour) ----------
+
+function addDay(iso: string, n: number): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  const dt = new Date(y, m - 1, d + n, 12);
+  return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
+}
+
+/** Jours d'affilée jusqu'à aujourd'hui (ou hier, si l'app n'a pas encore été ouverte aujourd'hui). */
+export function loginStreak(days: string[], todayIso: string): number {
+  const set = new Set(days);
+  let cursor = set.has(todayIso) ? todayIso : addDay(todayIso, -1);
+  let n = 0;
+  while (set.has(cursor)) {
+    n++;
+    cursor = addDay(cursor, -1);
+  }
+  return n;
+}
+
+/** Coffres gagnés : un à chaque 7e jour d'affilée (7, 14, 21…). */
+export function chestEarnings(days: string[]): Earning[] {
+  const sorted = [...new Set(days)].sort();
+  const out: Earning[] = [];
+  let run = 0;
+  let prev: string | null = null;
+  for (const d of sorted) {
+    run = prev && addDay(prev, 1) === d ? run + 1 : 1;
+    prev = d;
+    if (run % 7 === 0) out.push({ kind: 'chest', label: `Coffre : ${run} jours d’affilée`, amount: ECONOMY.streakChest, date: d, ref: `chest:${d}` });
+  }
+  return out;
+}
+
+/** XP liée à la connexion quotidienne et aux astuces lues (jamais de RC). */
+export const LOGIN_XP = { perDay: 10, chest: 50, tip: 5 } as const;

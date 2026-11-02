@@ -517,3 +517,29 @@ describe('économie RunCoin', () => {
     expect(sponsoredProgress(c, [{ startTime: new Date(2026, 10, 3).getTime(), distanceM: 12500 }], '2026-11-02')).toBeGreaterThan(0);
   });
 });
+
+import { chestEarnings, loginStreak, tipOfDay } from '../src/index.ts';
+
+describe('connexion quotidienne et bienvenue', () => {
+  const days = ['2026-11-01', '2026-11-02', '2026-11-03', '2026-11-04', '2026-11-05', '2026-11-06', '2026-11-07', '2026-11-08'];
+  it('compte la série et la remet à zéro après un jour manqué', () => {
+    expect(loginStreak(days, '2026-11-08')).toBe(8);
+    expect(loginStreak(days, '2026-11-09')).toBe(8); // pas encore ouvert aujourd'hui
+    expect(loginStreak(days, '2026-11-10')).toBe(0);
+  });
+  it('ouvre un coffre tous les 7 jours d’affilée', () => {
+    const c = chestEarnings(days);
+    expect(c).toHaveLength(1);
+    expect(c[0]).toMatchObject({ date: '2026-11-07', amount: ECONOMY.streakChest });
+  });
+  it('le bonus de bienvenue ne se touche qu’une fois', () => {
+    const g = applyCaps([
+      { kind: 'welcome', label: 'b', amount: ECONOMY.welcomeBonus, date: '2026-11-02', ref: 'welcome' },
+      { kind: 'welcome', label: 'b', amount: ECONOMY.welcomeBonus, date: '2026-11-03', ref: 'welcome2' },
+    ]);
+    expect(g.reduce((a, x) => a + x.granted, 0)).toBe(ECONOMY.welcomeBonus);
+  });
+  it('donne une astuce stable pour la journée', () => {
+    expect(tipOfDay('2026-11-02').id).toBe(tipOfDay('2026-11-02').id);
+  });
+});
