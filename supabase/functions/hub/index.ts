@@ -195,12 +195,7 @@ async function overview(db: SupabaseClient, me: string): Promise<HubOverview> {
       for (const s of board) {
         const winner = t.mode === 'most' ? s.rank === 1 && s.value > 0 : s.done;
         await db.from('challenge_participants').update({ final_value: s.value, rewarded: winner }).eq('challenge_id', c.id).eq('user_id', s.userId);
-        if (winner) {
-          await db.from('points_ledger').upsert(
-            { user_id: s.userId, kind: 'challenge', label: `Défi gagné : ${t.title}`, points: t.pointsReward, ref: `challenge:${c.id}` },
-            { onConflict: 'user_id,kind,ref', ignoreDuplicates: true },
-          );
-        }
+        // Défis entre amis : XP uniquement, pas de RunCoins (évite les arrangements entre amis pour « farmer »).
       }
     }
 

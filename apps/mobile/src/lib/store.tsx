@@ -5,16 +5,24 @@ import * as WebBrowser from 'expo-web-browser';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   analyzeActivity,
+  isInWindow,
   buildPlan,
   evaluateSession,
   type Activity,
   type SessionValidation,
+  applyCaps,
   computeLedger,
+  ECONOMY,
+  sponsoredChallengeOf,
+  sponsoredProgress,
+  weeklyRoom,
+  type Earning,
+  type GrantedEarning,
+  type SponsoredChallenge,
   computeStats,
   levelInfo,
   mondayOf,
   weeklyQuests,
-  type LedgerEntry,
   type LevelInfo,
   type Plan,
   type PlanRequest,
@@ -23,7 +31,9 @@ import {
   type TrustReport,
 } from '@foulee/core';
 
+import { nativeAdsAvailable, showRewardedAd } from '@/lib/ads';
 import { simulate, type DemoResult, type Scenario } from '@/lib/demo';
+import { healthAvailable, readRuns, requestHealthAccess, stepsToday } from '@/lib/health';
 import { imageForPlan, type ImageKey } from '@/lib/images';
 import { callFunction, isDemo, supabase } from '@/lib/supabase';
 
@@ -67,14 +77,22 @@ interface PersistedState {
   plans: PlanEntry[];
   connections: Record<Provider, boolean>;
   redemptions: Redemption[];
+  /** Pubs regardées (démo : créditées localement ; en ligne : créditées par le serveur). */
+  ads: Array<{ date: string; ref: string }>;
+  /** Challenges sponsorisés réclamés (démo). */
+  sponsoredClaims: string[];
   /** Solde serveur (mode connecté). */
   serverBalance?: number;
+  /** Historique serveur des gains (mode connecté). */
+  serverLedger?: Array<{ kind: string; label: string; points: number; created_at: string }>;
 }
 
 const INITIAL: PersistedState = {
   plans: [],
   connections: { garmin: false, apple_health: false, health_connect: false, strava: false },
   redemptions: [],
+  ads: [],
+  sponsoredClaims: [],
 };
 
 const KEY = 'foulee/state/v2';
@@ -90,18 +108,43 @@ export function formatDateFr(iso: string, opts: Intl.DateTimeFormatOptions = { w
   return new Date(y, m - 1, d, 12).toLocaleDateString('fr-FR', opts);
 }
 
-function ledgerOf(s: PersistedState): LedgerEntry[] {
-  const out: LedgerEntry[] = [];
-  for (const p of s.plans) out.push(...computeLedger(p.plan, p.validations).map((e) => ({ ...e, ref: `${p.id}:${e.ref ?? e.kind}` })));
-  for (const r of s.redemptions) out.push({ kind: 'redeem', label: r.title, points: -r.cost, ref: r.code });
+/** Tous les gains dus (avant plafonds) : séances, semaines, pubs, challenges sponsorisés. */
+function earningsOf(s: PersistedState): Earning[] {
+  const out: Earning[] = [];
+  for (const p of s.plans) out.push(...computeLedger(p.plan, p.validations, `${p.id}:`));
+  for (const a of s.ads) out.push({ kind: 'ad', label: 'Pub regardée', amount: ECONOMY.adReward, date: a.date, ref: a.ref });
+  for (const w of s.sponsoredClaims) out.push({ kind: 'sponsored', label: `Challenge sponsorisé (${w})`, amount: ECONOMY.sponsoredChallenge, date: w, ref: `sp-${w}` });
   return out;
+}
+
+/** Courses validées (pour les challenges). */
+export function runsOf(plans: PlanEntry[]) {
+  return plans.flatMap((p) =>
+    p.plan.sessions
+      .filter((x) => ['validee', 'partielle'].includes(p.validations[x.id]?.status ?? ''))
+      .map((x) => {
+        const [y, m, d] = x.date.split('-').map(Number);
+        return { startTime: new Date(y, m - 1, d, 18).getTime(), distanceM: x.distanceM * Math.min(1, p.validations[x.id].volumeScore || 1) };
+      }),
+  );
 }
 
 interface Store extends PersistedState {
   ready: boolean;
   syncing: boolean;
-  ledger: LedgerEntry[];
+  /** Gains après plafonds (démo) ou historique serveur. */
+  ledger: Array<{ label: string; amount: number; capped?: string; date: string }>;
   balance: number;
+  room: { earned: number; left: number; adsLeftToday: number };
+  sponsored: { challenge: SponsoredChallenge; progress: number; claimed: boolean };
+  claimSponsored(): void;
+  /** Pub récompensée. Renvoie les RC crédités (0 si plafond atteint ou pub non terminée). */
+  watchAd(play: () => Promise<boolean>): Promise<number>;
+  adsMode: 'native' | 'demo' | 'off';
+  steps: number | null;
+  health: 'unavailable' | 'available' | 'connected';
+  connectHealth(): Promise<number>;
+  importHealthRuns(): Promise<number>;
   stats: Stats;
   level: LevelInfo;
   quests: Quest[];
@@ -189,10 +232,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         : { data: [] };
       const { data: conns } = await supabase.from('device_connections').select('provider').is('revoked_at', null);
       const { data: bal } = await supabase.from('points_balance').select('balance').maybeSingle();
+      const { data: hist } = await supabase.from('points_ledger').select('kind, label, points, created_at').order('created_at', { ascending: false }).limit(100);
 
       setState((s) => ({
         ...s,
         serverBalance: bal?.balance ?? 0,
+        serverLedger: hist ?? [],
         connections: { ...INITIAL.connections, ...Object.fromEntries((conns ?? []).map((c) => [c.provider, true])) },
         plans: (plans ?? []).map((p) => ({
           id: p.id,
@@ -238,11 +283,40 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [ready, refresh]);
 
   // ---------- Dérivés : points, XP, niveau, défis ----------
-  const ledger = useMemo(() => ledgerOf(state), [state]);
+  const granted: GrantedEarning[] = useMemo(() => applyCaps(earningsOf(state)), [state]);
+  const ledger = useMemo(() => {
+    if (!isDemo) {
+      return (state.serverLedger ?? []).map((e) => ({ label: e.label, amount: e.points, date: e.created_at.slice(0, 10) }));
+    }
+    return [
+      ...granted.map((g) => ({ label: g.label, amount: g.granted, capped: g.capped, date: g.date })),
+      ...state.redemptions.map((r) => ({ label: r.title, amount: -r.cost, date: r.date })),
+    ].sort((a, b) => b.date.localeCompare(a.date));
+  }, [granted, state.redemptions, state.serverLedger]);
   const balance = useMemo(
-    () => (isDemo ? ledger.reduce((a, e) => a + e.points, 0) : (state.serverBalance ?? 0)),
-    [ledger, state.serverBalance],
+    () => (isDemo ? granted.reduce((a, g) => a + g.granted, 0) - state.redemptions.reduce((a, r) => a + r.cost, 0) : (state.serverBalance ?? 0)),
+    [granted, state.redemptions, state.serverBalance],
   );
+  const room = useMemo(() => weeklyRoom(granted, todayIso()), [granted]);
+  const sponsored = useMemo(() => {
+    const week = mondayOf(todayIso());
+    const challenge = sponsoredChallengeOf(week);
+    return { challenge, progress: sponsoredProgress(challenge, runsOf(state.plans), week), claimed: state.sponsoredClaims.includes(week) };
+  }, [state.plans, state.sponsoredClaims]);
+
+  // ---------- Apple Santé : disponibilité, pas du jour ----------
+  const [healthOk, setHealthOk] = useState(false);
+  const [steps, setSteps] = useState<number | null>(null);
+  useEffect(() => {
+    healthAvailable().then(setHealthOk);
+  }, []);
+  useEffect(() => {
+    if (!healthOk || !state.connections.apple_health) return;
+    const load = () => stepsToday().then(setSteps);
+    load();
+    const t = setInterval(load, 5 * 60_000);
+    return () => clearInterval(t);
+  }, [healthOk, state.connections.apple_health]);
   const progress = useMemo(() => state.plans.map((p) => ({ plan: p.plan, validations: p.validations })), [state.plans]);
   const stats = useMemo(() => computeStats(progress, todayIso()), [progress]);
   const level = useMemo(() => levelInfo(stats.xp), [stats.xp]);
@@ -293,8 +367,73 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return result;
   };
 
+  /** Import des séances Apple Santé : rattachées automatiquement aux séances prévues. */
+  const importHealthRuns = async (): Promise<number> => {
+    const runs = await readRuns(new Date(Date.now() - 30 * 86_400_000));
+    if (!isDemo) {
+      for (const a of runs) await callFunction('ingest-activity', { ...a, manual: a.manual ? true : false }).catch(() => {});
+      await refresh();
+      return runs.length;
+    }
+    let matched = 0;
+    setState((st) => {
+      let plans = st.plans;
+      for (const a of runs) {
+        const trust = analyzeActivity(a);
+        const candidates = plans.flatMap((p) =>
+          p.plan.sessions.filter((x) => isInWindow(x, a.startTime) && p.validations[x.id]?.status !== 'validee').map((x) => ({ p, x })),
+        );
+        if (!candidates.length) continue;
+        const day = new Date(a.startTime).toISOString().slice(0, 10);
+        const pick = candidates.find((c) => c.x.date === day) ?? candidates.sort((u, v) => Math.abs(u.x.durationSec - a.durationSec) - Math.abs(v.x.durationSec - a.durationSec))[0];
+        const result: DemoResult = { ...evaluateSession(pick.x, a, trust), trust, source: 'apple_health' };
+        const prev = pick.p.validations[pick.x.id];
+        if (prev && prev.points >= result.points) continue;
+        matched++;
+        plans = plans.map((p) => (p.id === pick.p.id ? { ...p, validations: { ...p.validations, [pick.x.id]: result } } : p));
+      }
+      return { ...st, plans };
+    });
+    return matched;
+  };
+
   const value: Store = {
     ...state,
+    room,
+    sponsored,
+    steps,
+    health: !healthOk ? 'unavailable' : state.connections.apple_health ? 'connected' : 'available',
+    adsMode: nativeAdsAvailable() ? 'native' : isDemo ? 'demo' : 'off',
+    claimSponsored: () => {
+      const week = mondayOf(todayIso());
+      if (sponsored.claimed || sponsored.progress < sponsored.challenge.target || !isDemo) return;
+      setState((st) => ({ ...st, sponsoredClaims: [...st.sponsoredClaims, week] }));
+      setCelebration({ points: ECONOMY.sponsoredChallenge, xp: 0, status: 'validee' });
+    },
+    watchAd: async (play) => {
+      if (room.adsLeftToday <= 0) return 0;
+      if (nativeAdsAvailable() && supabase) {
+        // Vraie pub : le serveur crédite après vérification de Google (quelques secondes).
+        const { data } = await supabase.auth.getUser();
+        const ok = await showRewardedAd(data.user?.id ?? '');
+        if (ok) setTimeout(() => refresh().catch(() => {}), 4000);
+        return ok ? ECONOMY.adReward : 0;
+      }
+      if (!isDemo) return 0;
+      const ok = await play(); // pub de démonstration
+      if (!ok) return 0;
+      setState((st) => ({ ...st, ads: [...st.ads, { date: todayIso(), ref: `ad-${Date.now()}` }] }));
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      return ECONOMY.adReward;
+    },
+    connectHealth: async () => {
+      const ok = await requestHealthAccess();
+      if (!ok) return -1;
+      setState((st) => ({ ...st, connections: { ...st.connections, apple_health: true } }));
+      stepsToday().then(setSteps);
+      return importHealthRuns();
+    },
+    importHealthRuns,
     ready,
     syncing,
     ledger,

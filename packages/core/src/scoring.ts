@@ -6,6 +6,7 @@ import type { Activity, Plan, PlannedSession } from './types.ts';
 import type { TrustReport } from './antiCheat.ts';
 import { flattenSteps } from './plan.ts';
 import { segmentSpeeds } from './antiCheat.ts';
+import { ECONOMY, type Earning } from './economy.ts';
 
 export type ValidationStatus = 'validee' | 'partielle' | 'non_validee' | 'refusee' | 'en_revue';
 
@@ -20,14 +21,10 @@ export interface SessionValidation {
   feedback: string;
 }
 
+/** Points de séance : voir `ECONOMY` (RunCoins). Conservé pour compatibilité. */
 export const POINTS = {
-  weekComplete: 150,
-  planComplete: 1000,
-  goalAchieved: 1000,
-  /** Plafond quotidien : limite l'intérêt de tricher et le risque de surentraînement. */
-  dailyCap: 600,
-  /** Conversion indicative pour l'utilisateur : 1 000 pts ≈ 2,50 € en bons d'achat. */
-  eurosPer1000: 2.5,
+  /** Valeur indicative affichée : 100 RC = 1 €. */
+  eurosPer100: 1,
 } as const;
 
 /** Fenêtre de validation : de 2 jours avant à 2 jours après la date prévue (on peut décaler une séance). */
@@ -141,33 +138,26 @@ export function evaluateSession(session: PlannedSession, activity: Activity, tru
   }
 
   const status: ValidationStatus = score >= 0.85 ? 'validee' : score >= 0.5 ? 'partielle' : 'non_validee';
-  const points = status === 'non_validee' ? 0 : Math.round(session.basePoints * score);
+  const points = status === 'validee' ? ECONOMY.sessionValidated : status === 'partielle' ? ECONOMY.sessionPartial : 0;
   return { ...base, volumeScore, intensityScore, status, score, points, feedback };
 }
 
-export interface LedgerEntry {
-  kind: 'session' | 'week' | 'plan' | 'goal' | 'redeem' | 'carry';
-  label: string;
-  points: number;
-  ref?: string;
-}
-
-/** Points calculés à partir des validations. Côté serveur, ce calcul alimente un journal en écriture seule. */
-export function computeLedger(plan: Plan, validations: Record<string, SessionValidation>): LedgerEntry[] {
-  const out: LedgerEntry[] = [];
+/**
+ * Gains en RunCoins dus pour un plan, AVANT plafonds (voir `applyCaps`).
+ * Les bonus « plan terminé » et « objectif atteint » rapportent de l'XP, pas de RC (trésorerie).
+ */
+export function computeLedger(plan: Plan, validations: Record<string, SessionValidation>, refPrefix = ''): Earning[] {
+  const out: Earning[] = [];
   const ok = (id: string) => ['validee', 'partielle'].includes(validations[id]?.status ?? '');
   for (const s of plan.sessions) {
     const v = validations[s.id];
-    if (v && v.points > 0) out.push({ kind: 'session', label: s.title, points: v.points, ref: s.id });
+    if (v && v.points > 0) out.push({ kind: 'session', label: s.title, amount: v.points, date: s.date, ref: `${refPrefix}${s.id}` });
   }
   for (const w of plan.weeks) {
     const ss = plan.sessions.filter((s) => s.week === w.n);
-    if (ss.length && ss.every((s) => ok(s.id))) out.push({ kind: 'week', label: `Semaine ${w.n} complète`, points: POINTS.weekComplete, ref: `week-${w.n}` });
-  }
-  if (plan.sessions.every((s) => ok(s.id))) out.push({ kind: 'plan', label: 'Plan terminé', points: POINTS.planComplete, ref: 'plan' });
-  const race = plan.sessions.find((s) => s.type === 'race');
-  if (race && validations[race.id]?.status === 'validee') {
-    out.push({ kind: 'goal', label: 'Objectif atteint', points: POINTS.goalAchieved, ref: 'goal' });
+    if (ss.length && ss.every((s) => ok(s.id))) {
+      out.push({ kind: 'week', label: `Semaine ${w.n} complète`, amount: ECONOMY.weekComplete, date: ss[ss.length - 1].date, ref: `${refPrefix}week-${w.n}` });
+    }
   }
   return out;
 }

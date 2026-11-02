@@ -26,6 +26,7 @@ Sans backend configuré, l'app tourne en **mode démo** : tout est calculé sur 
 
 ## Documentation
 
+- [docs/MISE-EN-SERVICE.md](docs/MISE-EN-SERVICE.md) : tout activer depuis GitHub (serveur, Strava, coach, Apple Santé, pubs)
 - [docs/PARAMETRES.md](docs/PARAMETRES.md) : tous les réglages, composant par composant
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) : choix techniques et sécurité
 

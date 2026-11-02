@@ -41,7 +41,6 @@ export default function NewChallengeScreen() {
                 </View>
               </Row>
               <Row>
-                <Chip tone="gold" icon="diamond" label={`${c.pointsReward} pts`} />
                 <Chip tone="xp" icon="flash" label={`${c.xpReward} XP`} />
               </Row>
             </Card>

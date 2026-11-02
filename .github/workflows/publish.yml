@@ -48,9 +48,12 @@ jobs:
         working-directory: apps/mobile
         env:
           MESSAGE: ${{ github.event.head_commit.message || 'Publication manuelle' }}
+          # Serveur : si ces secrets existent, l'app quitte le mode démo.
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_PROJECT_REF != '' && format('https://{0}.supabase.co', secrets.SUPABASE_PROJECT_REF) || '' }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: eas update --branch preview --message "${MESSAGE%%$'\n'*}" --non-interactive
 
-      - name: Aperçu web
+      - name: Aperçu web (toujours en mode démo)
         working-directory: apps/mobile
         run: |
           npx expo export --platform web

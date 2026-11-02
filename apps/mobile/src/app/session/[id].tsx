@@ -1,7 +1,7 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { formatDuration, formatPace, nutritionFor, toWatchWorkout, warmupAdvice, ZONE_LABELS, type Step } from '@foulee/core';
+import { ECONOMY, formatDuration, formatPace, nutritionFor, toWatchWorkout, warmupAdvice, ZONE_LABELS, type Step } from '@foulee/core';
 
 import { Button, Card, Chip, Ionicons, IntensityProfile, Row, Txt } from '@/components/ui';
 import { PhotoCard } from '@/components/visuals';
@@ -55,7 +55,7 @@ export default function SessionScreen() {
       <PhotoCard image={imageForSession(session.type)} height={280}>
         <Row>
           <Chip tone="glass" icon={SESSION_ICON[session.type]} label={goalTitle(entry.plan)} />
-          <Chip tone="gold" icon="diamond" label={`jusqu’à ${session.basePoints} pts`} />
+          <Chip tone="gold" icon="cash" label={`+${ECONOMY.sessionValidated} RC`} />
         </Row>
         <Txt variant="hero" color="#fff">
           {session.title}
@@ -82,7 +82,7 @@ export default function SessionScreen() {
             <Txt variant="title" color={t[STATUS[v.status].tone]}>
               {STATUS[v.status].label}
             </Txt>
-            {v.points > 0 && <Chip tone="gold" icon="diamond" label={`+${v.points} pts`} />}
+            {v.points > 0 && <Chip tone="gold" icon="cash" label={`+${v.points} RC`} />}
           </Row>
           <Txt>{v.feedback}</Txt>
           {v.status !== 'refusee' && (

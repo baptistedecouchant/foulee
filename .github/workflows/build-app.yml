@@ -1,0 +1,51 @@
+# Construction de l'app installable (Apple Santé, GPS écran verrouillé, pubs AdMob).
+# À lancer à la main : onglet Actions → « Construire l'app » → Run workflow.
+# Prérequis : compte Apple Developer et identifiants iOS déjà enregistrés chez Expo
+# (une première fois avec `npx eas-cli build --profile development --platform ios`).
+
+name: Construire l'app
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: 'Profil EAS'
+        type: choice
+        options: [development, preview, production]
+        default: development
+      platform:
+        description: 'Plateforme'
+        type: choice
+        options: [ios, android, all]
+        default: ios
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      # Les serveurs Expo ne voient pas les variables de GitHub : on les écrit dans eas.json
+      # (copie de travail uniquement, jamais committée).
+      - name: Transmettre l'adresse du serveur à la construction
+        working-directory: apps/mobile
+        env:
+          URL: ${{ secrets.SUPABASE_PROJECT_REF != '' && format('https://{0}.supabase.co', secrets.SUPABASE_PROJECT_REF) || '' }}
+          KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          node -e "
+            const fs = require('fs'); const j = JSON.parse(fs.readFileSync('eas.json'));
+            if (process.env.URL && process.env.KEY) for (const p of Object.values(j.build))
+              p.env = { ...(p.env || {}), EXPO_PUBLIC_SUPABASE_URL: process.env.URL, EXPO_PUBLIC_SUPABASE_ANON_KEY: process.env.KEY };
+            fs.writeFileSync('eas.json', JSON.stringify(j, null, 2));"
+      - name: Lancer la construction sur les serveurs Expo
+        working-directory: apps/mobile
+        run: eas build --profile ${{ inputs.profile }} --platform ${{ inputs.platform }} --non-interactive --no-wait

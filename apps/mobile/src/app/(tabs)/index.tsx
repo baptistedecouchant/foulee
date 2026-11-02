@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { BADGES, formatDuration } from '@foulee/core';
+import { BADGES, ECONOMY, formatDuration } from '@foulee/core';
 
 import { Button, Card, Chip, Ionicons, LevelBadge, ProgressBar, Row, SectionTitle, StatPill, Txt } from '@/components/ui';
 import { GradientCard, PhotoCard } from '@/components/visuals';
@@ -14,7 +14,7 @@ import { formatDateFr, MAX_ACTIVE_PLANS, todayIso, useStore } from '@/lib/store'
 export default function HomeScreen() {
   const t = useTheme();
   const top = useTopInset();
-  const { plans, stats, level, quests, balance } = useStore();
+  const { plans, stats, level, quests, balance, steps, health, sponsored, claimSponsored } = useStore();
   const today = todayIso();
 
   // Prochaine séance à faire, tous entraînements confondus.
@@ -60,10 +60,31 @@ export default function HomeScreen() {
         </View>
         <Row>
           <StatPill icon="flame" value={`${stats.streak} série`} color="#fff" bg="rgba(255,106,43,0.9)" />
-          <StatPill icon="diamond" value={`${fmtInt(balance)} pts`} color={t.goldText} bg={t.gold} />
+          <StatPill icon="cash" value={`${fmtInt(balance)} RC`} color={t.goldText} bg={t.gold} />
           <StatPill icon="flash" value={`${fmtInt(stats.xp)} XP`} color="#04281B" bg={t.xp} />
         </Row>
       </GradientCard>
+
+      {/* ---------- Pas du jour (Apple Santé) ---------- */}
+      <Card style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.m, paddingVertical: Spacing.m }}>
+        <View style={[styles.badgeIcon, { backgroundColor: t.xpSoft }]}>
+          <Ionicons name="walk" size={22} color={t.ok} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Txt variant="label" muted>
+            Pas aujourd’hui
+          </Txt>
+          {health === 'connected' ? (
+            <Txt variant="title">{steps == null ? '…' : fmtInt(steps)}</Txt>
+          ) : (
+            <Txt variant="caption" muted>
+              {health === 'available' ? 'Connecte Apple Santé pour les voir ici.' : 'Disponible avec Apple Santé, dans l’app installée.'}
+            </Txt>
+          )}
+        </View>
+        {health === 'available' && <Button small kind="secondary" label="Connecter" onPress={() => router.push('/devices')} />}
+        {health === 'connected' && steps != null && <ProgressBarMini value={steps / 10000} />}
+      </Card>
 
       {/* ---------- Séance du jour / prochaine séance ---------- */}
       {plans.length === 0 ? (
@@ -81,7 +102,7 @@ export default function HomeScreen() {
           <PhotoCard image={imageForSession(next.s.type)} height={320} onPress={() => router.push({ pathname: '/session/[id]', params: { id: next.s.id, plan: next.p.id } })}>
             <Row>
               <Chip tone="glass" icon={SESSION_ICON[next.s.type]} label={formatDateFr(next.s.date, { weekday: 'long', day: 'numeric' })} />
-              <Chip tone="gold" icon="diamond" label={`jusqu’à ${next.s.basePoints} pts`} />
+              <Chip tone="gold" icon="cash" label={`+${ECONOMY.sessionValidated} RC`} />
             </Row>
             <Txt variant="display" color="#fff">
               {next.s.title}
@@ -93,6 +114,28 @@ export default function HomeScreen() {
           </PhotoCard>
         </>
       ) : null}
+
+      {/* ---------- Challenge sponsorisé de la semaine ---------- */}
+      <SectionTitle>Challenge de la semaine</SectionTitle>
+      <GradientCard colors={Gradients.flame}>
+        <Row style={{ justifyContent: 'space-between' }}>
+          <Chip tone="glass" icon="megaphone" label={`Proposé par ${sponsored.challenge.sponsor}`} />
+          <Chip tone="gold" icon="cash" label={`+${ECONOMY.sponsoredChallenge} RC`} />
+        </Row>
+        <Txt variant="display" color="#fff">
+          {sponsored.challenge.title}
+        </Txt>
+        <Txt color="rgba(255,255,255,0.9)">{sponsored.challenge.description}</Txt>
+        <ProgressBar value={sponsored.progress / sponsored.challenge.target} colors={Gradients.gold} track="rgba(255,255,255,0.25)" />
+        <Txt variant="caption" color="#fff">
+          {String(sponsored.progress).replace('.', ',')} / {sponsored.challenge.target} {sponsored.challenge.metric === 'sessions' ? 'sorties' : 'km'}
+        </Txt>
+        {sponsored.claimed ? (
+          <Chip tone="xp" icon="checkmark-circle" label="Récompense obtenue" />
+        ) : sponsored.progress >= sponsored.challenge.target ? (
+          <Button kind="gold" icon="gift" label="Récupérer mes RC" onPress={claimSponsored} />
+        ) : null}
+      </GradientCard>
 
       {/* ---------- Défis de la semaine ---------- */}
       {quests.length > 0 && (
@@ -182,6 +225,23 @@ export default function HomeScreen() {
         <Total icon="checkmark-done" value={String(stats.sessionsDone)} label="séances" />
       </Row>
     </ScrollView>
+  );
+}
+
+function ProgressBarMini({ value }: { value: number }) {
+  const t = useTheme();
+  return (
+    <View style={{ width: 60, alignItems: 'flex-end', gap: 4 }}>
+      <Txt variant="caption" muted>
+        {Math.min(100, Math.round(value * 100))} %
+      </Txt>
+      <View style={{ width: 60 }}>
+        <ProgressBar value={value} height={6} />
+      </View>
+      <Txt variant="caption" muted>
+        10 000
+      </Txt>
+    </View>
   );
 }
 

@@ -3,7 +3,7 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { formatDuration, formatPace, formatTime, nutritionFor, warmupAdvice, type PlannedSession } from '@foulee/core';
+import { ECONOMY, formatDuration, formatPace, formatTime, nutritionFor, warmupAdvice, type PlannedSession } from '@foulee/core';
 
 import { Button, Chip, Ionicons, ProgressBar, Row, Txt } from '@/components/ui';
 import { Fonts, Gradients, Radius, Spacing } from '@/constants/theme';
@@ -98,7 +98,7 @@ function Run({ entry, session }: { entry: PlanEntry; session: PlannedSession }) 
             <Pressable accessibilityRole="button" accessibilityLabel="Fermer" onPress={() => router.back()} style={styles.iconBtn}>
               <Ionicons name="close" size={24} color="#fff" />
             </Pressable>
-            <Chip tone="gold" icon="diamond" label={`jusqu’à ${session.basePoints} pts`} />
+            <Chip tone="gold" icon="cash" label={`+${ECONOMY.sessionValidated} RC`} />
           </Row>
           <Txt variant="label" color={C.muted}>
             Séance guidée

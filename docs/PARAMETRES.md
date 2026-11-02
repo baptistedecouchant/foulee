@@ -149,9 +149,9 @@ Fichier : `plan.ts` (`quality`), `t` = avancement dans la phase (0 à 1)
 
 « Échauffement intense » = 15 min EF + 3 × (20 s d'accélération progressive / 40 s trot).
 
-## 7. Validation des séances et points
+## 7. Validation des séances et RunCoins
 
-Fichier : `packages/core/src/scoring.ts`
+Fichiers : `packages/core/src/scoring.ts` (validation), `packages/core/src/economy.ts` (**tout le barème et tous les plafonds**)
 
 | Paramètre | Valeur | Rôle |
 |---|---|---|
@@ -161,13 +161,30 @@ Fichier : `packages/core/src/scoring.ts`
 | Score allures | part du temps dans la cible ÷ 0,8 (plafonné à 1) | Les récupérations ne comptent pas |
 | Score final | 50 % volume + 50 % allures | |
 | Statuts | ≥ 0,85 validée · ≥ 0,5 partielle · sinon non validée ; refusée si l'anti-triche rejette ; en vérification si le score de confiance est < 60 | |
-| Points d'une séance | points max × score (0 si non validée) | |
-| Bonus semaine complète | **+150** | Toutes les séances de la semaine validées ou partielles |
-| Bonus plan terminé | **+1 000** | |
-| Bonus objectif atteint | **+1 000** | Jour J « validée » |
-| Plafond quotidien | **600 pts** de séances par jour | Côté serveur |
-| Conversion affichée | 1 000 pts ≈ **2,50 €** | Indicatif |
-| Remplacement | une meilleure exécution remplace une moins bonne, jamais l'inverse | |
+
+**Monnaie : RunCoin (RC), 100 RC = 1 €** (`ECONOMY` dans `economy.ts`)
+
+| Gain | RC | Remarque |
+|---|---|---|
+| Séance validée | **10** | |
+| Séance validée en partie | **5** | |
+| Semaine complète | **15** | |
+| Challenge sponsorisé réussi | **20** | Financé par la marque partenaire |
+| Pub vidéo regardée (30 s) | **1** | Mettre 2 seulement si le CPM réel dépasse 20 € (voir plus bas) |
+| Défis entre amis, badges, plan terminé, objectif atteint | 0 RC | Uniquement de l'XP, pour éviter les arrangements entre amis |
+
+| Plafond | Valeur |
+|---|---|
+| Séances payées | 1 par jour, 4 par semaine |
+| Pubs | 3 par jour, 10 par semaine |
+| Challenge sponsorisé | 1 par semaine |
+| Total | **75 RC/semaine**, **275 RC/mois** |
+
+Tous les plafonds sont appliqués dans l'ordre chronologique (`applyCaps`), à l'identique dans l'app et sur le serveur. Les tests vérifient deux choses : un utilisateur assidu (3 séances par semaine) gagne entre 400 et 550 RC en 2 mois, et un utilisateur « au maximum » ne dépasse pas 550 RC sur 2 mois calendaires.
+
+**Rentabilité de la pub** : avec un CPM de 12 €, une vue rapporte 0,012 €. Verser 2 RC (0,02 €) ferait perdre 0,008 € par vue ; à 1 RC (0,01 €), on gagne 0,002 € par vue.
+
+**Suivi de la dette** : la vue SQL `runcoin_liability` donne les RC distribués, échangés et en circulation, avec leur équivalent en euros.
 
 ## 8. Anti-triche GPS et capteurs
 
@@ -290,17 +307,17 @@ Fichiers : `packages/core/src/challenges.ts`, `supabase/functions/hub/index.ts`,
 
 | Défi | Règle | Durée | Récompense |
 |---|---|---|---|
-| Duel des 7 jours | le plus de km | 7 j | 150 pts, 200 XP |
-| Premier à 50 km | atteindre 50 km | 30 j | 250 pts, 300 XP |
-| 3 séances cette semaine | 3 sorties d'au moins 2 km | 7 j | 80 pts, 120 XP |
-| La sortie longue | une sortie d'au moins 15 km | 7 j | 120 pts, 200 XP |
-| 100 km en un mois | atteindre 100 km | 30 j | 300 pts, 400 XP |
-| Régularité | le plus de sorties | 14 j | 150 pts, 250 XP |
+| Duel des 7 jours | le plus de km | 7 j | 200 XP (pas de RC) |
+| Premier à 50 km | atteindre 50 km | 30 j | 300 XP (pas de RC) |
+| 3 séances cette semaine | 3 sorties d'au moins 2 km | 7 j | 120 XP (pas de RC) |
+| La sortie longue | une sortie d'au moins 15 km | 7 j | 200 XP (pas de RC) |
+| 100 km en un mois | atteindre 100 km | 30 j | 400 XP (pas de RC) |
+| Régularité | le plus de sorties | 14 j | 250 XP (pas de RC) |
 
 | Paramètre | Valeur |
 |---|---|
 | Activités prises en compte | uniquement celles validées par l'anti-triche (« confiance »), sans doublon |
-| Gagnant | « le plus » : le 1er avec plus de 0 ; « objectif » : tous ceux qui l'atteignent |
+| Gagnant | « le plus » : le 1er avec plus de 0 ; « objectif » : tous ceux qui l'atteignent. Récompense en XP uniquement |
 | Invités par défi | 10 max, amis uniquement |
 | Statistiques visibles | km sur 7 et 30 jours, sorties sur 30 jours ; visibles par les amis seulement |
 | Code ami | 6 caractères sans 0, O, 1, I, l (anti-confusion) |
@@ -311,16 +328,20 @@ Fichiers : `packages/core/src/challenges.ts`, `supabase/functions/hub/index.ts`,
 
 ## 14. Récompenses et boutique
 
-Fichiers : `app/(tabs)/rewards.tsx` (catalogue démo), tables `partners`, `rewards`, `reward_codes`, fonction SQL `redeem_reward`
+Fichiers : `app/(tabs)/rewards.tsx` (catalogue démo), tables `partners`, `rewards` (`affiliate_url`, `kind`), `reward_codes`, fonction SQL `redeem_reward`
 
-| Article (démo) | Coût |
-|---|---|
-| Bon d'achat 5 € | 2 000 pts |
-| Pack de 6 gels | 2 500 pts |
-| −15 % sur un dossard | 3 000 pts |
-| Bon d'achat 10 € | 4 000 pts |
+| Article (démo) | Coût | Équivalent |
+|---|---|---|
+| -10 % sur ta prochaine commande | 250 RC | ~1 mois de pratique régulière |
+| -15 % sur un dossard | 400 RC | |
+| Bon d'achat 5 € | 500 RC | ~2 mois |
+| Bon d'achat 10 € | 1 000 RC | |
 
-En production, le catalogue vient de la base. Chaque échange prend un code partenaire réel dans `reward_codes`, vérifie le solde et le stock, et empêche deux échanges simultanés (verrou par utilisateur). Le solde ne peut jamais devenir négatif.
+En production, chaque article est un **code ou un lien affilié tracké** du partenaire (commission sur l'achat). Un échange vérifie le solde et le stock, et empêche deux échanges simultanés. Le solde ne peut jamais devenir négatif.
+
+**Pubs récompensées** (`lib/ads.native.ts`, fonction `ad-reward`) : Google AdMob avec vérification côté serveur (signature ECDSA vérifiée avec les clés publiques de Google). Les identifiants actuels sont ceux de **test** fournis par Google. Dans Expo Go et en démo, une pub de démonstration de 30 s s'affiche à la place.
+
+**Challenge sponsorisé de la semaine** (`sponsoredChallengeOf`) : tourne entre « 20 km », « 3 sorties » et « sortie longue de 12 km » tant qu'aucun partenaire n'est enregistré dans la table `sponsored_challenges`.
 
 ## 15. Coach IA
 
@@ -344,7 +365,9 @@ Fichiers : `packages/core/src/prompts.ts` (consignes), `supabase/functions/coach
 |---|---|---|
 | Strava | `strava-connect`, `strava-callback`, `strava-webhook`, `_shared/strava.ts` | Autorisation `activity:read_all` ; import des **30 derniers jours** (30 activités max) ; types Run, TrailRun, VirtualRun ; cadence × 2 ; jeton rafraîchi 60 s avant expiration ; jeton de connexion valable 10 min, à usage unique |
 | Garmin | `garmin-webhook`, `push-workout` | En attente de l'accès développeur Garmin ; format montre neutre dans `watchExport.ts` |
-| Apple Santé / Health Connect | `lib/health.ts`, `ingest-activity` | Interface prête ; module natif à ajouter (build installé) ; trace limitée à 50 000 points et 200 blocs |
+| Apple Santé | `lib/health.native.ts`, `ingest-activity` | Lecture des séances de course des **30 derniers jours** (50 max), avec trace GPS, fréquence cardiaque et indicateur « saisie manuelle » ; **pas du jour** (somme dédoublonnée par Santé, actualisée toutes les 5 min, objectif affiché 10 000) ; accès en lecture seule. Module natif : app installée uniquement |
+| Nike Run Club | via Apple Santé | Nike n'a pas d'accès direct |
+| Health Connect (Android) | `lib/health.native.ts` | Interface prévue, module à ajouter |
 | GPS de l'app | `ingest-activity` (source `app_gps`) | Envoie la trace et le découpage en blocs |
 
 ## 17. Base de données et sécurité serveur

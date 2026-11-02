@@ -46,7 +46,7 @@ export function ChallengeCard({ c, onRespond }: { c: HubChallenge; onRespond?: (
       {c.myStatus === 'invited' ? (
         <>
           <Txt>
-            <Txt style={{ fontWeight: '800' }}>{c.createdBy.name}</Txt> te lance ce défi. À gagner : {tpl.pointsReward} pts et {tpl.xpReward} XP.
+            <Txt style={{ fontWeight: '800' }}>{c.createdBy.name}</Txt> te lance ce défi. À gagner : {tpl.xpReward} XP.
           </Txt>
           <Row>
             <View style={{ flex: 1 }}>

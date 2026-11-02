@@ -15,3 +15,6 @@ verify_jwt = false
 
 [functions.garmin-webhook]
 verify_jwt = false
+
+[functions.ad-reward]
+verify_jwt = false

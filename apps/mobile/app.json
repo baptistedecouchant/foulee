@@ -57,6 +57,22 @@
           "isIosBackgroundLocationEnabled": false,
           "isAndroidBackgroundLocationEnabled": false
         }
+      ],
+      [
+        "@kingstinct/react-native-healthkit",
+        {
+          "NSHealthShareUsageDescription": "Foulée lit tes séances de course et ton nombre de pas pour valider ton plan et créditer tes RunCoins.",
+          "NSHealthUpdateUsageDescription": false,
+          "background": false
+        }
+      ],
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-3940256099942544~3347511713",
+          "iosAppId": "ca-app-pub-3940256099942544~1458002511",
+          "userTrackingUsageDescription": "Permet d’afficher des publicités plus pertinentes. Tu peux refuser, les récompenses restent les mêmes."
+        }
       ]
     ],
     "experiments": {

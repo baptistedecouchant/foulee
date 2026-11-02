@@ -75,7 +75,7 @@ const SOURCES: Source[] = [
 
 export default function DevicesScreen() {
   const t = useTheme();
-  const { connections, setConnection, connectStrava, syncing, refresh } = useStore();
+  const { connections, setConnection, connectStrava, syncing, refresh, health, connectHealth, importHealthRuns } = useStore();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -138,7 +138,7 @@ export default function DevicesScreen() {
                   {on ? <Chip tone="ok" icon="checkmark-circle" label="Connecté" /> : null}
                 </View>
               </Row>
-              {isDemo && s.id !== 'nike' ? (
+              {isDemo && s.id !== 'nike' && !(s.id === 'apple_health' && health !== 'unavailable') ? (
                 <Switch
                   accessibilityLabel={`Connecter ${s.name}`}
                   value={on}
@@ -156,7 +156,26 @@ export default function DevicesScreen() {
               </Txt>
             )}
             {!isDemo && s.id === 'strava' && !on && <Button icon="link" label={busy ? 'Connexion…' : 'Connecter Strava'} disabled={busy} onPress={connect} />}
-            {!isDemo && s.id !== 'strava' && !on && (
+            {s.id === 'apple_health' && health !== 'unavailable' && (
+              <Button
+                icon={health === 'connected' ? 'sync' : 'heart'}
+                label={busy ? 'Import…' : health === 'connected' ? 'Importer mes dernières séances' : 'Connecter Apple Santé'}
+                disabled={busy}
+                onPress={async () => {
+                  setBusy(true);
+                  setMessage(null);
+                  try {
+                    const n = health === 'connected' ? await importHealthRuns() : await connectHealth();
+                    setMessage(n < 0 ? 'Accès refusé. Tu peux l’autoriser dans Réglages → Santé → Accès aux données → Foulée.' : `${n} séance(s) importée(s) et vérifiée(s).`);
+                  } catch {
+                    setMessage('L’import a échoué. Réessaie.');
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              />
+            )}
+            {(!isDemo || (s.id === 'apple_health' && health === 'unavailable')) && s.id !== 'strava' && !on && !(s.id === 'apple_health' && health !== 'unavailable') && (
               <Row>
                 <Ionicons name="information-circle" size={16} color={t.textSecondary} />
                 <Txt variant="caption" muted style={{ flex: 1 }}>

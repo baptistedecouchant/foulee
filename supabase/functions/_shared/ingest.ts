@@ -9,7 +9,12 @@ import {
   evaluateSession,
   isDuplicate,
   isInWindow,
-  POINTS,
+  applyCaps,
+  ECONOMY,
+  mondayOf,
+  sponsoredChallengeOf,
+  sponsoredProgress,
+  type Earning,
   SOURCE_PRIORITY,
   trackFingerprint,
   type Activity,
@@ -147,62 +152,71 @@ export async function ingestActivity(db: SupabaseClient, userId: string, activit
     });
   }
 
-  await syncLedger(db, userId, planId, plan);
+  await syncLedger(db, userId);
   return { status: trust.verdict === 'rejected' ? 'rejected' : 'stored', activityId: inserted.id, validation };
 }
 
 /** Recalcule les points dus et n'insère que les lignes manquantes (idempotent). */
-async function syncLedger(db: SupabaseClient, userId: string, planId: string, plan: Plan) {
+/**
+ * Recalcule TOUS les gains en RunCoins de l'utilisateur (séances et semaines de tous ses plans,
+ * pubs vérifiées, challenge sponsorisé), applique les plafonds de `ECONOMY`, puis insère ce qui
+ * manque dans le journal. Idempotent : peut être rappelé à tout moment sans double paiement.
+ */
+export async function syncLedger(db: SupabaseClient, userId: string) {
   const { data: profile } = await db.from('profiles').select('rewards_suspended').eq('id', userId).single();
   if (profile?.rewards_suspended) return;
 
-  const { data: rows } = await db.from('session_validations').select('*').eq('plan_id', planId);
-  const validations: Record<string, SessionValidation> = {};
-  for (const r of rows ?? []) {
-    validations[r.session_id] = {
-      sessionId: r.session_id,
-      status: r.status,
-      score: Number(r.score),
-      volumeScore: Number(r.volume_score),
-      intensityScore: Number(r.intensity_score),
-      points: r.points,
-      feedback: r.feedback,
-    };
-  }
+  const earnings: Earning[] = [];
 
-  const due = computeLedger(plan, validations);
-  const { data: existing } = await db.from('points_ledger').select('kind, ref, points, created_at').eq('user_id', userId);
-  // points déjà versés par référence (ligne d'origine + ajustements)
-  const have = new Map<string, number>();
-  for (const e of existing ?? []) {
-    if (e.kind === 'redeem') continue;
-    const base = e.ref.split(':adj:')[0];
-    have.set(base, (have.get(base) ?? 0) + e.points);
-  }
-
-  // Plafond quotidien sur les points de séance.
-  const today = new Date().toISOString().slice(0, 10);
-  let todaySession = (existing ?? [])
-    .filter((e) => e.kind === 'session' && e.created_at.slice(0, 10) === today)
-    .reduce((a, e) => a + e.points, 0);
-
-  for (const entry of due) {
-    const ref = `${planId}:${entry.ref ?? entry.kind}`;
-    const prev = have.get(ref);
-    if (prev != null && prev >= entry.points) continue;
-    let pts = entry.points - (prev ?? 0);
-    if (entry.kind === 'session') {
-      pts = Math.min(pts, Math.max(0, POINTS.dailyCap - todaySession));
-      todaySession += pts;
-      if (pts <= 0) continue;
+  // Séances et semaines complètes, tous plans non abandonnés
+  const { data: plans } = await db.from('plans').select('id, plan').eq('user_id', userId).neq('status', 'abandoned');
+  const ids = (plans ?? []).map((p) => p.id);
+  const { data: rows } = ids.length ? await db.from('session_validations').select('*').in('plan_id', ids) : { data: [] };
+  for (const p of plans ?? []) {
+    const validations: Record<string, SessionValidation> = {};
+    for (const r of (rows ?? []).filter((x) => x.plan_id === p.id)) {
+      validations[r.session_id] = {
+        sessionId: r.session_id,
+        status: r.status,
+        score: Number(r.score),
+        volumeScore: Number(r.volume_score),
+        intensityScore: Number(r.intensity_score),
+        points: r.points,
+        feedback: r.feedback,
+      };
     }
-    // amélioration d'une séance déjà payée : ligne d'ajustement distincte
-    await db.from('points_ledger').insert({
-      user_id: userId,
-      kind: prev != null ? 'adjustment' : entry.kind,
-      label: entry.label,
-      points: pts,
-      ref: prev != null ? `${ref}:adj:${Date.now()}` : ref,
-    });
+    earnings.push(...computeLedger(p.plan as Plan, validations, `${p.id}:`));
+  }
+
+  // Pubs regardées, vérifiées par Google (fonction ad-reward)
+  const { data: ads } = await db.from('ad_views').select('transaction_id, created_at').eq('user_id', userId);
+  for (const a of ads ?? []) {
+    earnings.push({ kind: 'ad', label: 'Pub regardée', amount: ECONOMY.adReward, date: a.created_at.slice(0, 10), ref: `ad:${a.transaction_id}` });
+  }
+
+  // Challenge sponsorisé de la semaine en cours (activités vérifiées uniquement)
+  const week = mondayOf(new Date().toISOString().slice(0, 10));
+  const challenge = sponsoredChallengeOf(week);
+  const { data: acts } = await db
+    .from('activities')
+    .select('start_time, distance_m')
+    .eq('user_id', userId)
+    .eq('trust_verdict', 'trusted')
+    .is('duplicate_of', null)
+    .gte('start_time', new Date(Date.now() - 8 * 86_400_000).toISOString());
+  const runs = (acts ?? []).map((a) => ({ startTime: new Date(a.start_time).getTime(), distanceM: a.distance_m }));
+  if (sponsoredProgress(challenge, runs, week) >= challenge.target) {
+    earnings.push({ kind: 'sponsored', label: `Challenge : ${challenge.title}`, amount: ECONOMY.sponsoredChallenge, date: week, ref: `sp:${week}` });
+  }
+
+  const granted = applyCaps(earnings);
+  const { data: existing } = await db.from('points_ledger').select('ref').eq('user_id', userId);
+  const have = new Set((existing ?? []).map((e) => e.ref));
+  const missing = granted.filter((g) => g.granted > 0 && !have.has(g.ref));
+  if (missing.length) {
+    await db.from('points_ledger').upsert(
+      missing.map((g) => ({ user_id: userId, kind: g.kind, label: g.label, points: g.granted, ref: g.ref })),
+      { onConflict: 'user_id,kind,ref', ignoreDuplicates: true },
+    );
   }
 }

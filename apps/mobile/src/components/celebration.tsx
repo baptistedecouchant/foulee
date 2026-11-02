@@ -67,9 +67,9 @@ export function CelebrationOverlay() {
               <View style={styles.rewards}>
                 {celebration.points > 0 && (
                   <View style={styles.reward}>
-                    <Ionicons name="diamond" size={22} color="#FFC233" />
+                    <Ionicons name="cash" size={22} color="#FFC233" />
                     <Text style={styles.rewardValue}>+{celebration.points}</Text>
-                    <Text style={styles.rewardLabel}>points</Text>
+                    <Text style={styles.rewardLabel}>RunCoins</Text>
                   </View>
                 )}
                 {celebration.xp > 0 && (

@@ -1,7 +1,7 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { daysBetween, formatDuration, formatPace, type Phase, type PlannedSession } from '@foulee/core';
+import { daysBetween, ECONOMY, formatDuration, formatPace, type Phase, type PlannedSession } from '@foulee/core';
 
 import { Button, Card, Chip, Ionicons, IntensityProfile, ProgressBar, Row, Txt } from '@/components/ui';
 import { GradientCard, PhotoCard } from '@/components/visuals';
@@ -165,9 +165,9 @@ function SessionRow({ entry, session }: { entry: PlanEntry; session: PlannedSess
   const past = session.date < todayIso();
   const isToday = session.date === todayIso();
 
-  let chip = <Chip icon="diamond" label={`${session.basePoints} pts`} />;
-  if (v?.status === 'validee') chip = <Chip tone="ok" icon="checkmark-circle" label={`+${v.points} pts`} />;
-  else if (v?.status === 'partielle') chip = <Chip tone="warn" icon="contrast" label={`+${v.points} pts`} />;
+  let chip = <Chip icon="cash" label={`+${ECONOMY.sessionValidated} RC`} />;
+  if (v?.status === 'validee') chip = <Chip tone="ok" icon="checkmark-circle" label={`+${v.points} RC`} />;
+  else if (v?.status === 'partielle') chip = <Chip tone="warn" icon="contrast" label={`+${v.points} RC`} />;
   else if (v?.status === 'refusee') chip = <Chip tone="bad" icon="ban" label="Refusée" />;
   else if (v?.status === 'non_validee') chip = <Chip tone="bad" icon="close-circle" label="Non validée" />;
   else if (v?.status === 'en_revue') chip = <Chip tone="warn" icon="hourglass" label="En vérification" />;
