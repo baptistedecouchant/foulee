@@ -21,21 +21,23 @@ Ne colle jamais une clé dans une conversation, uniquement dans GitHub.
 
 Dès que ces secrets existent, l'app publiée quitte le mode démo et utilise le vrai serveur.
 
-## 1 bis. Comptes utilisateurs (e-mail, Google, Apple)
+## 1 bis. Comptes utilisateurs (connexion obligatoire)
+
+Au premier lancement, l'app demande de se connecter avec **Apple**, **Google**, ou un **e-mail et un mot de passe** (avec prénom, nom et date de naissance). L'âge minimum est de 15 ans. Les deux consentements obligatoires (conditions d'utilisation et données de santé) sont horodatés.
 
 Dans Supabase → **Authentication** :
 
-1. **Sign In / Providers** :
-   - active **Allow anonymous sign-ins** (déjà fait) ;
-   - active **Allow manual linking**, pour qu'un compte invité puisse être relié à un e-mail, Google ou Apple sans perdre ses données ;
-   - vérifie que **Email** est activé.
-2. **URL Configuration → Redirect URLs** : ajoute `exp://**` (Expo Go) et `foulee://**` (app installée).
-3. **Emails → SMTP Settings** : branche **Resend**. Sans ça, Supabase n'envoie que 2 e-mails par heure, ce qui ne suffit pas pour les codes de connexion.
-   - Host `smtp.resend.com`, port `465`, utilisateur `resend`, mot de passe = ta clé API Resend ;
-   - expéditeur : une adresse de ton domaine vérifié.
-4. **Emails → Templates** : dans « Confirm sign up », « Magic Link » et « Change Email Address », affiche le code avec `{{ .Token }}`. L'app demande un code à 6 chiffres, pas un lien.
-5. **Google** (après l'étape Google Cloud) : **Providers → Google**, colle le *Client ID* et le *Client secret* du client OAuth « Web ». Dans Google Cloud, l'URL de redirection autorisée est `https://<ta référence>.supabase.co/auth/v1/callback`.
-6. **Apple** (après l'inscription au programme Apple Developer) : **Providers → Apple**. Dans « Client IDs », mets `app.foulee.mobile` (connexion native sur iPhone). Pour la connexion par navigateur, crée un *Services ID* et une clé *Sign in with Apple* sur developer.apple.com.
+1. **Sign In / Providers → Email** : activé, avec **Confirm email** activé.
+   - « Allow anonymous sign-ins » n'est plus utilisé, tu peux le désactiver.
+2. **Emails → Templates** : l'app demande un **code à 6 chiffres**, pas un lien. Remplace le contenu de ces modèles par un texte contenant `{{ .Token }}` :
+   - **Confirm signup** : `Bienvenue sur Foulée ! Ton code de confirmation : {{ .Token }}`
+   - **Reset Password** : `Ton code pour changer de mot de passe Foulée : {{ .Token }}`
+3. **URL Configuration → Redirect URLs** : ajoute `exp://**` et `foulee://**` (retour après Google ou Apple).
+4. **Emails → SMTP Settings** : branche **Resend** (host `smtp.resend.com`, port `465`, utilisateur `resend`, mot de passe = clé API Resend). Sans ça, Supabase n'envoie que 2 e-mails par heure.
+5. **Google** : **Providers → Google**, colle le *Client ID* et le *Client secret* du client OAuth « Web » créé dans Google Cloud. Dans Google Cloud, l'URL de redirection autorisée est `https://<ta référence>.supabase.co/auth/v1/callback`.
+6. **Apple** : **Providers → Apple**. Dans « Client IDs », mets `app.foulee.mobile` (connexion native sur iPhone). Pour la connexion par navigateur, crée un *Services ID* et une clé *Sign in with Apple* sur developer.apple.com.
+
+Tant que Google et Apple ne sont pas configurés, leurs boutons affichent « Cette méthode de connexion n'est pas encore activée ». L'e-mail fonctionne tout de suite.
 
 ## 2. Strava
 

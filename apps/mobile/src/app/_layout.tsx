@@ -4,8 +4,10 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 
+import { AuthScreen, CompleteProfileScreen } from '@/components/auth-screens';
 import { CelebrationOverlay } from '@/components/celebration';
 import { Colors } from '@/constants/theme';
+import { SessionProvider, useSession } from '@/lib/session';
 import { SocialProvider } from '@/lib/social';
 import { AppProvider, useStore } from '@/lib/store';
 
@@ -13,18 +15,25 @@ SplashScreen.preventAutoHideAsync();
 
 function Navigator() {
   const { ready } = useStore();
+  const { status } = useSession();
   const scheme = useColorScheme() === 'dark' ? 'dark' : 'light';
   const c = Colors[scheme];
 
   useEffect(() => {
-    if (ready) SplashScreen.hideAsync();
-  }, [ready]);
+    if (ready && status !== 'loading') SplashScreen.hideAsync();
+  }, [ready, status]);
 
   const base = scheme === 'dark' ? DarkTheme : DefaultTheme;
   return (
     <ThemeProvider
       value={{ ...base, colors: { ...base.colors, primary: c.accent, background: c.background, card: c.surface, text: c.text, border: c.line } }}>
       <StatusBar style="auto" />
+      {/* Connexion obligatoire : rien n'est accessible sans compte (sauf en mode démo). */}
+      {status === 'signedOut' ? (
+        <AuthScreen />
+      ) : status === 'incomplete' ? (
+        <CompleteProfileScreen />
+      ) : status === 'loading' ? null : (
       <Stack screenOptions={{ headerBackTitle: 'Retour', headerTintColor: c.accent, headerShadowVisible: false, headerTransparent: false }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="goal" options={{ presentation: 'modal', title: 'Nouvel objectif' }} />
@@ -37,6 +46,7 @@ function Navigator() {
         <Stack.Screen name="chat/[id]" options={{ title: '' }} />
         <Stack.Screen name="challenge/new" options={{ presentation: 'modal', title: 'Lancer un défi' }} />
       </Stack>
+      )}
       <CelebrationOverlay />
     </ThemeProvider>
   );
@@ -44,10 +54,12 @@ function Navigator() {
 
 export default function RootLayout() {
   return (
-    <AppProvider>
-      <SocialProvider>
-        <Navigator />
-      </SocialProvider>
-    </AppProvider>
+    <SessionProvider>
+      <AppProvider>
+        <SocialProvider>
+          <Navigator />
+        </SocialProvider>
+      </AppProvider>
+    </SessionProvider>
   );
 }

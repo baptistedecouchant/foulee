@@ -1,6 +1,7 @@
 import 'react-native-url-polyfill/auto';
 import { createClient } from '@supabase/supabase-js';
 import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 
 const url = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
@@ -37,7 +38,8 @@ const secureStorage = {
 export const supabase = isDemo
   ? null
   : createClient(url!, anonKey!, {
-      auth: { storage: secureStorage, autoRefreshToken: true, persistSession: true, detectSessionInUrl: false, flowType: 'pkce' },
+      // Web : stockage par défaut du navigateur (le trousseau n'existe que sur téléphone).
+      auth: { storage: Platform.OS === 'web' ? undefined : secureStorage, autoRefreshToken: true, persistSession: true, detectSessionInUrl: false, flowType: 'pkce' },
     });
 
 /** Appel d'une fonction serveur avec le jeton de l'utilisateur. */

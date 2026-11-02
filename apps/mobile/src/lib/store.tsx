@@ -294,14 +294,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Mode connecté : les données suivent le compte. Connexion → chargement ; déconnexion → on vide
+  // tout ce qui était affiché sur le téléphone (rien ne doit rester d'un compte à l'autre).
   useEffect(() => {
     if (!supabase || !ready) return;
-    (async () => {
-      const { data } = await supabase.auth.getSession();
-      // Pas encore de compte : session anonyme (le compte pourra être relié à un e-mail plus tard).
-      if (!data.session) await supabase.auth.signInAnonymously();
-      await refresh();
-    })().catch(() => {});
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session && !data.session.user.is_anonymous) refresh().catch(() => {});
+    });
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session && !session.user.is_anonymous) refresh().catch(() => {});
+      if (event === 'SIGNED_OUT') setState((st) => ({ ...INITIAL, checkins: [], tipsRead: st.tipsRead }));
+    });
+    return () => data.subscription.unsubscribe();
   }, [ready, refresh]);
 
   // ---------- Dérivés : points, XP, niveau, défis ----------

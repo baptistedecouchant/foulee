@@ -401,6 +401,22 @@ Fichiers : `supabase/migrations/*.sql`, `supabase/config.toml`
 | Création de plan | calculée par le serveur avec le même moteur (impossible de s'inventer un plan) |
 | Hébergement | région UE (RGPD : données de santé) |
 
+## 17 bis. Comptes et connexion
+
+Fichiers : `apps/mobile/src/lib/auth.ts`, `lib/session.tsx`, `components/auth-screens.tsx`, migration `20261107000000_profile_identity.sql`
+
+| Paramètre | Valeur |
+|---|---|
+| Connexion | obligatoire au premier lancement (sauf mode démo) |
+| Méthodes | Apple (natif sur iPhone dans l'app installée, sinon navigateur), Google, e-mail + mot de passe |
+| Inscription par e-mail | prénom, nom, date de naissance (JJ/MM/AAAA), e-mail, mot de passe ; adresse confirmée par code à 6 chiffres |
+| Mot de passe | 8 caractères minimum, au moins une lettre et un chiffre ; réinitialisation par code reçu par e-mail |
+| Âge minimum | **15 ans**, vérifié dans l'app et par la base de données |
+| Consentements | conditions d'utilisation et traitement des données de santé : obligatoires, horodatés (`terms_accepted_at`, `health_consent_at`) |
+| Après Google / Apple | écran « Encore une étape » s'il manque le nom, la date de naissance ou les consentements |
+| Session | dans le trousseau iOS / Keystore Android (découpée en morceaux de 1 800 caractères) ; flux OAuth PKCE |
+| Déconnexion | efface les données affichées sur le téléphone |
+
 ## 18. Design
 
 Fichier : `apps/mobile/src/constants/theme.ts`
