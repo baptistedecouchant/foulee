@@ -21,6 +21,7 @@ Deno.serve(
       throw new HttpError(400, 'invalid_activity');
     }
     if ((body.track?.length ?? 0) > MAX_POINTS) throw new HttpError(413, 'track_too_large');
+    if (body.laps && (!Array.isArray(body.laps) || body.laps.length > 200)) throw new HttpError(400, 'invalid_laps');
     // Le téléphone ne peut pas se déclarer « non manuel » pour une source qui ne fournit pas l'info.
     const activity: Activity = { ...body, manual: body.manual !== false };
 

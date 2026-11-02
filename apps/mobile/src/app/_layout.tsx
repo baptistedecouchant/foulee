@@ -6,6 +6,7 @@ import { useColorScheme } from 'react-native';
 
 import { CelebrationOverlay } from '@/components/celebration';
 import { Colors } from '@/constants/theme';
+import { SocialProvider } from '@/lib/social';
 import { AppProvider, useStore } from '@/lib/store';
 
 SplashScreen.preventAutoHideAsync();
@@ -29,6 +30,11 @@ function Navigator() {
         <Stack.Screen name="goal" options={{ presentation: 'modal', title: 'Nouvel objectif' }} />
         <Stack.Screen name="plan/[id]" options={{ title: '' }} />
         <Stack.Screen name="session/[id]" options={{ title: '' }} />
+        <Stack.Screen name="run/[id]" options={{ presentation: 'fullScreenModal', headerShown: false, gestureEnabled: false }} />
+        <Stack.Screen name="devices" options={{ title: 'Montres & apps' }} />
+        <Stack.Screen name="player/[id]" options={{ title: '' }} />
+        <Stack.Screen name="chat/[id]" options={{ title: '' }} />
+        <Stack.Screen name="challenge/new" options={{ presentation: 'modal', title: 'Lancer un défi' }} />
       </Stack>
       <CelebrationOverlay />
     </ThemeProvider>
@@ -38,7 +44,9 @@ function Navigator() {
 export default function RootLayout() {
   return (
     <AppProvider>
-      <Navigator />
+      <SocialProvider>
+        <Navigator />
+      </SocialProvider>
     </AppProvider>
   );
 }

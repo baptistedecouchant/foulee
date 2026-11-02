@@ -1,7 +1,7 @@
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { formatDuration, formatPace, toWatchWorkout, ZONE_LABELS, type Step } from '@foulee/core';
+import { formatDuration, formatPace, nutritionFor, toWatchWorkout, warmupAdvice, ZONE_LABELS, type Step } from '@foulee/core';
 
 import { Button, Card, Chip, Ionicons, IntensityProfile, Row, Txt } from '@/components/ui';
 import { PhotoCard } from '@/components/visuals';
@@ -45,6 +45,8 @@ export default function SessionScreen() {
   const ai = entry.enrichment?.sessions[session.id];
   const watchConnected = connections.garmin || connections.apple_health;
   const anyConnected = Object.values(connections).some(Boolean);
+  const nutrition = nutritionFor(session, entry.plan.request.goal);
+  const warmup = warmupAdvice(session);
 
   return (
     <ScrollView style={{ backgroundColor: t.background }} contentContainerStyle={styles.page}>
@@ -63,6 +65,16 @@ export default function SessionScreen() {
         </Txt>
         <IntensityProfile steps={session.steps} height={46} color="#FFFFFF" />
       </PhotoCard>
+
+      <Button
+        kind="gold"
+        icon="play-circle"
+        label={v?.status === 'validee' ? 'Refaire la séance guidée' : 'Démarrer la séance guidée'}
+        onPress={() => router.push({ pathname: '/run/[id]', params: { id: session.id, plan: entry.id } })}
+      />
+      <Txt variant="caption" muted style={{ textAlign: 'center', marginTop: -8 }}>
+        GPS du téléphone, coach vocal, alertes d’allure. Ou lance la séance depuis ta montre.
+      </Txt>
 
       {v && (
         <Card style={{ borderColor: t[STATUS[v.status].tone], borderWidth: 2 }}>
@@ -123,13 +135,51 @@ export default function SessionScreen() {
           </Txt>
         </Row>
         <Txt>{ai?.tip ?? session.tip}</Txt>
+        {warmup && (
+          <>
+            <Row>
+              <Ionicons name="body" size={18} color={t.accent} />
+              <Txt variant="label" muted>
+                Échauffement et récupération
+              </Txt>
+            </Row>
+            <Txt>{warmup}</Txt>
+          </>
+        )}
+      </Card>
+
+      <Card>
         <Row>
           <Ionicons name="nutrition" size={18} color={t.xp} />
           <Txt variant="label" muted>
             Nutrition
           </Txt>
         </Row>
-        <Txt>{ai?.nutrition ?? session.nutrition}</Txt>
+        {ai?.nutrition ? <Txt style={{ fontWeight: '700' }}>{ai.nutrition}</Txt> : null}
+        {(
+          [
+            ['Avant', nutrition.before],
+            ['Pendant', nutrition.during],
+            ['Après', nutrition.after],
+          ] as const
+        )
+          .filter(([, tips]) => tips.length)
+          .map(([title, tips]) => (
+            <View key={title} style={{ gap: 6 }}>
+              <Chip tone={title === 'Avant' ? 'accent' : title === 'Pendant' ? 'gold' : 'ok'} label={title} />
+              {tips.map((tip, i) => (
+                <Row key={i} style={{ alignItems: 'flex-start' }}>
+                  <Ionicons name={tip.icon} size={16} color={t.textSecondary} style={{ marginTop: 2 }} />
+                  <View style={{ flex: 1 }}>
+                    <Txt variant="caption" style={{ fontWeight: '800' }}>
+                      {tip.when}
+                    </Txt>
+                    <Txt variant="caption">{tip.text}</Txt>
+                  </View>
+                </Row>
+              ))}
+            </View>
+          ))}
       </Card>
 
       <Card>
@@ -159,7 +209,7 @@ export default function SessionScreen() {
             }}
           />
         ) : (
-          <Txt muted>Connecte une Garmin ou une Apple Watch dans l’onglet Montres pour y envoyer la séance.</Txt>
+          <Txt muted>Connecte une Garmin ou une Apple Watch dans « Montres & apps » (icône montre de l’accueil) pour y envoyer la séance.</Txt>
         )}
         {error && <Txt color={t.bad}>{error}</Txt>}
         <Button kind="ghost" small icon="code-slash" label={showJson ? 'Masquer le format montre' : 'Voir le format envoyé à la montre'} onPress={() => setShowJson(!showJson)} />
@@ -194,7 +244,7 @@ export default function SessionScreen() {
               </View>
             </>
           ) : (
-            <Txt muted>Connecte d’abord une montre ou une app dans l’onglet Montres.</Txt>
+            <Txt muted>Connecte d’abord une montre ou une app dans « Montres & apps » (icône montre de l’accueil).</Txt>
           )}
         </Card>
       )}

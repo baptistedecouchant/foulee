@@ -14,7 +14,8 @@
       "infoPlist": {
         "NSHealthShareUsageDescription": "Foulée lit tes séances de course enregistrées par ta montre pour valider ton plan et créditer tes points.",
         "NSHealthUpdateUsageDescription": "Foulée n'écrit pas de données dans Santé.",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSLocationWhenInUseUsageDescription": "Foulée utilise ta position pendant une séance pour mesurer ton allure et ta distance, et te guider à la voix."
       }
     },
     "android": {
@@ -26,7 +27,10 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "app.foulee.mobile",
-      "permissions": [],
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ],
       "blockedPermissions": [
         "android.permission.ACCESS_BACKGROUND_LOCATION"
       ]
@@ -45,7 +49,15 @@
           "imageWidth": 76
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Foulée utilise ta position pendant une séance pour mesurer ton allure et ta distance, et te guider à la voix.",
+          "isIosBackgroundLocationEnabled": false,
+          "isAndroidBackgroundLocationEnabled": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": false,

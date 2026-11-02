@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { BADGES, formatDuration } from '@foulee/core';
 
 import { Button, Card, Chip, Ionicons, LevelBadge, ProgressBar, Row, SectionTitle, StatPill, Txt } from '@/components/ui';
@@ -40,7 +40,12 @@ export default function HomeScreen() {
               {next?.s.date === today ? 'Séance au programme !' : 'Prêt à courir ?'}
             </Txt>
           </View>
-          <LevelBadge level={level.level} />
+          <Row>
+            <Pressable accessibilityRole="button" accessibilityLabel="Montres et apps" onPress={() => router.push('/devices')} style={styles.watchBtn}>
+              <Ionicons name="watch" size={22} color="#fff" />
+            </Pressable>
+            <LevelBadge level={level.level} />
+          </Row>
         </Row>
         <View style={{ gap: 6 }}>
           <Row style={{ justifyContent: 'space-between' }}>
@@ -73,7 +78,7 @@ export default function HomeScreen() {
       ) : next ? (
         <>
           <SectionTitle>{next.s.date === today ? 'Aujourd’hui' : 'Prochaine séance'}</SectionTitle>
-          <PhotoCard image={imageForSession(next.s.type)} height={260} onPress={() => router.push({ pathname: '/session/[id]', params: { id: next.s.id, plan: next.p.id } })}>
+          <PhotoCard image={imageForSession(next.s.type)} height={320} onPress={() => router.push({ pathname: '/session/[id]', params: { id: next.s.id, plan: next.p.id } })}>
             <Row>
               <Chip tone="glass" icon={SESSION_ICON[next.s.type]} label={formatDateFr(next.s.date, { weekday: 'long', day: 'numeric' })} />
               <Chip tone="gold" icon="diamond" label={`jusqu’à ${next.s.basePoints} pts`} />
@@ -84,6 +89,7 @@ export default function HomeScreen() {
             <Txt color="rgba(255,255,255,0.85)">
               {formatDuration(next.s.durationSec)} · {(next.s.distanceM / 1000).toFixed(1).replace('.', ',')} km · {goalTitle(next.p.plan)}
             </Txt>
+            <Button kind="gold" icon="play" label="Démarrer" onPress={() => router.push({ pathname: '/run/[id]', params: { id: next.s.id, plan: next.p.id } })} />
           </PhotoCard>
         </>
       ) : null}
@@ -195,5 +201,6 @@ function Total({ icon, value, label }: { icon: 'map' | 'time' | 'checkmark-done'
 const styles = StyleSheet.create({
   page: { padding: Spacing.l, gap: Spacing.l, paddingBottom: 120 },
   addCard: { width: 170, height: 190, borderRadius: Radius.l, borderWidth: 2, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', gap: Spacing.s, padding: Spacing.m },
+  watchBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' },
   badgeIcon: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
 });

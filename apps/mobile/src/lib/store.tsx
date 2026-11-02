@@ -4,7 +4,11 @@ import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
+  analyzeActivity,
   buildPlan,
+  evaluateSession,
+  type Activity,
+  type SessionValidation,
   computeLedger,
   computeStats,
   levelInfo,
@@ -111,6 +115,8 @@ interface Store extends PersistedState {
   connectStrava(): Promise<'connected' | 'cancelled' | 'error' | string>;
   sendToWatch(planId: string, sessionId: string): Promise<void>;
   simulateSync(planId: string, sessionId: string, scenario: Scenario): DemoResult | null;
+  /** Séance faite dans l'app avec le GPS du téléphone. */
+  recordRun(planId: string, sessionId: string, activity: Activity): Promise<DemoResult | null>;
   resetSession(planId: string, sessionId: string): void;
   redeem(r: { id: string; title: string; cost: number }): Redemption | null;
   refresh(): Promise<void>;
@@ -260,6 +266,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const updatePlan = (id: string, f: (p: PlanEntry) => PlanEntry) =>
     setState((s) => ({ ...s, plans: s.plans.map((p) => (p.id === id ? f(p) : p)) }));
 
+  /** Enregistre un résultat de séance, calcule l'XP gagnée et déclenche l'écran de célébration. */
+  const applyResult = (planId: string, sessionId: string, result: DemoResult): DemoResult => {
+    const entry = state.plans.find((p) => p.id === planId)!;
+    const prev = entry.validations[sessionId];
+    if (prev && prev.points >= result.points && prev.status !== 'refusee' && result.status !== 'refusee') {
+      setCelebration({ points: 0, xp: 0, status: result.status });
+      return prev;
+    }
+    const after = state.plans.map((p) =>
+      p.id === planId ? { plan: p.plan, validations: { ...p.validations, [sessionId]: result } } : { plan: p.plan, validations: p.validations },
+    );
+    const newStats = computeStats(after, todayIso());
+    const newLevel = levelInfo(newStats.xp);
+    updatePlan(planId, (p) => ({ ...p, validations: { ...p.validations, [sessionId]: result } }));
+    setCelebration({
+      points: Math.max(0, result.points - (prev?.points ?? 0)),
+      xp: Math.max(0, newStats.xp - stats.xp),
+      status: result.status,
+      levelUp: newLevel.level > level.level ? newLevel : undefined,
+      newTitle: newLevel.title !== level.title,
+    });
+    Haptics.notificationAsync(
+      result.status === 'validee' || result.status === 'partielle' ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Error,
+    ).catch(() => {});
+    return result;
+  };
+
   const value: Store = {
     ...state,
     ready,
@@ -298,28 +331,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const session = entry?.plan.sessions.find((x) => x.id === sessionId);
       const source = (['garmin', 'apple_health', 'health_connect', 'strava'] as Provider[]).find((p) => state.connections[p]);
       if (!entry || !session || !source) return null;
-      const result = simulate(session, scenario, source);
-      const prev = entry.validations[sessionId];
-      if (prev && prev.points >= result.points && prev.status !== 'refusee') return prev;
-
-      // XP avant / après pour détecter un passage de niveau.
-      const after = state.plans.map((p) =>
-        p.id === planId ? { plan: p.plan, validations: { ...p.validations, [sessionId]: result } } : { plan: p.plan, validations: p.validations },
-      );
-      const newStats = computeStats(after, todayIso());
-      const newLevel = levelInfo(newStats.xp);
-      updatePlan(planId, (p) => ({ ...p, validations: { ...p.validations, [sessionId]: result } }));
-      setCelebration({
-        points: result.points - (prev?.points ?? 0),
-        xp: newStats.xp - stats.xp,
-        status: result.status,
-        levelUp: newLevel.level > level.level ? newLevel : undefined,
-        newTitle: newLevel.title !== level.title,
-      });
-      Haptics.notificationAsync(
-        result.status === 'validee' || result.status === 'partielle' ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Error,
-      ).catch(() => {});
-      return result;
+      return applyResult(planId, sessionId, simulate(session, scenario, source));
+    },
+    recordRun: async (planId, sessionId, activity) => {
+      const entry = state.plans.find((p) => p.id === planId);
+      const session = entry?.plan.sessions.find((x) => x.id === sessionId);
+      if (!entry || !session) return null;
+      if (isDemo) {
+        // Mêmes contrôles que le serveur : anti-triche puis validation bloc par bloc.
+        const trust = analyzeActivity(activity, Date.now() + 60_000);
+        return applyResult(planId, sessionId, { ...evaluateSession(session, activity, trust), trust, source: 'app_gps' });
+      }
+      const res = await callFunction<{ validation?: SessionValidation }>('ingest-activity', activity);
+      if (!res.validation) {
+        await refresh();
+        return null;
+      }
+      const out = applyResult(planId, sessionId, { ...res.validation, trust: { verdict: 'trusted', trustScore: 100, flags: [] }, source: 'app_gps' });
+      refresh().catch(() => {});
+      return out;
     },
     resetSession: (planId, sessionId) =>
       updatePlan(planId, (p) => {

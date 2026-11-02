@@ -132,4 +132,10 @@ export interface Activity {
   deviceName?: string;
   track?: TrackPoint[];
   avgHr?: number;
+  /**
+   * Découpage en blocs (séance guidée dans l'app ou sur la montre) : début et fin
+   * de chaque bloc, en epoch ms. Le serveur recalcule l'allure de chaque bloc à partir
+   * de la trace GPS vérifiée, il ne fait pas confiance aux allures envoyées.
+   */
+  laps?: Array<{ start: number; end: number }>;
 }

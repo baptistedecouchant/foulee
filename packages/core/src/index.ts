@@ -8,3 +8,7 @@ export * from './scoring.ts';
 export * from './prompts.ts';
 export * from './watchExport.ts';
 export * from './gamification.ts';
+export * from './liveWorkout.ts';
+export * from './nutrition.ts';
+export * from './challenges.ts';
+export * from './hub.ts';

@@ -30,11 +30,11 @@ export const POINTS = {
   eurosPer1000: 2.5,
 } as const;
 
-/** Fenêtre de validation : de la veille au surlendemain de la date prévue. */
+/** Fenêtre de validation : de 2 jours avant à 2 jours après la date prévue (on peut décaler une séance). */
 export function isInWindow(session: PlannedSession, activityStart: number): boolean {
   const [y, m, d] = session.date.split('-').map(Number);
   const planned = new Date(y, m - 1, d).getTime();
-  return activityStart >= planned - 86_400_000 && activityStart < planned + 3 * 86_400_000;
+  return activityStart >= planned - 2 * 86_400_000 && activityStart < planned + 3 * 86_400_000;
 }
 
 /**
@@ -54,6 +54,30 @@ export function timeInTarget(session: PlannedSession, activity: Activity): numbe
   }
 
   const segs = segmentSpeeds(track);
+
+  // Séance guidée : on connaît le début et la fin réels de chaque bloc.
+  if (activity.laps && activity.laps.length === blocks.length) {
+    let inTarget = 0;
+    let counted = 0;
+    blocks.forEach((b, i) => {
+      if (b.zone === 'rec') return;
+      const lap = activity.laps![i];
+      let d = 0;
+      let dt = 0;
+      for (const s of segs) {
+        if (s.t > lap.start && s.t <= lap.end) {
+          d += s.d;
+          dt += s.dt;
+        }
+      }
+      counted += b.expectedSec;
+      if (dt <= 0 || d <= 0) return;
+      const pace = dt / (d / 1000);
+      if (pace >= b.pace.lo * 0.95 && pace <= b.pace.hi * 1.08) inTarget += b.expectedSec;
+    });
+    return counted > 0 ? inTarget / counted : 0;
+  }
+
   const t0 = track[0].t;
   let cursor = 0;
   let inTarget = 0;

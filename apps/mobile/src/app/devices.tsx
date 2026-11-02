@@ -5,7 +5,6 @@ import { Button, Card, Chip, Ionicons, Row, Txt, type IconName } from '@/compone
 import { GradientCard } from '@/components/visuals';
 import { Gradients, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { useTopInset } from '@/hooks/use-top-inset';
 import { useStore, type Provider } from '@/lib/store';
 import { isDemo } from '@/lib/supabase';
 
@@ -76,7 +75,6 @@ const SOURCES: Source[] = [
 
 export default function DevicesScreen() {
   const t = useTheme();
-  const top = useTopInset();
   const { connections, setConnection, connectStrava, syncing, refresh } = useStore();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -103,7 +101,7 @@ export default function DevicesScreen() {
   };
 
   return (
-    <ScrollView style={{ backgroundColor: t.background }} contentContainerStyle={[styles.page, { paddingTop: Spacing.l + top }]} contentInsetAdjustmentBehavior="automatic">
+    <ScrollView style={{ backgroundColor: t.background }} contentContainerStyle={styles.page}>
       <View style={{ gap: 4 }}>
         <Txt variant="hero">Montres & apps</Txt>
         <Txt muted>Tes séances arrivent toutes seules, sont vérifiées, puis transformées en points et en XP.</Txt>

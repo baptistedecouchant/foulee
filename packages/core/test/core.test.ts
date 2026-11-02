@@ -324,3 +324,127 @@ describe('gamification', () => {
     expect(q[0]).toMatchObject({ id: 'all', current: 1, target: 4, done: false });
   });
 });
+
+import { announceStep, buildLiveSteps, challengeValue, CHALLENGES, leaderboard, LiveWorkout, nutritionFor, warmupAdvice } from '../src/index.ts';
+
+describe('séance guidée en direct', () => {
+  const plan = buildPlan(tenK45);
+  const vma = plan.sessions.find((s) => s.type === 'vma' && s.title.includes('400'))!;
+
+  /** Fait « courir » la séance seconde par seconde à une allure donnée (facteur sur l'allure cible). */
+  function run(factor: (stepZone: string) => number) {
+    const w = new LiveWorkout(vma);
+    const events = [...w.start(0)];
+    let t = 0;
+    let d = 0;
+    while (!w.finished && t < 4 * 3600) {
+      const s = w.current!;
+      const pace = ((s.pace.lo + s.pace.hi) / 2) * factor(s.zone);
+      t += 1;
+      d += 1000 / pace;
+      events.push(...w.update({ elapsedSec: t, distanceM: d, paceSecPerKm: pace, now: t * 1000 }));
+    }
+    return { w, events };
+  }
+
+  it('numérote les répétitions et annonce allure, durée et distance', () => {
+    const steps = buildLiveSteps(vma);
+    const reps = steps.filter((s) => s.rep);
+    expect(reps[0].rep).toEqual({ n: 1, of: reps.length });
+    const speech = announceStep(reps[0]);
+    expect(speech).toContain('1 sur');
+    expect(speech).toContain('400 mètres');
+    expect(speech).toContain('au kilomètre');
+  });
+
+  it('enchaîne tous les blocs jusqu’à la fin, sans alerte si l’allure est bonne', () => {
+    const { w, events } = run(() => 1);
+    expect(events.filter((e) => e.type === 'step_start')).toHaveLength(w.steps.length);
+    expect(events.at(-1)!.type).toBe('finished');
+    expect(events.some((e) => e.type === 'pace_alert')).toBe(false);
+    expect(events.some((e) => e.type === 'countdown')).toBe(true);
+    expect(w.laps).toHaveLength(w.steps.length);
+    expect(w.laps.every((l) => l.end >= l.start)).toBe(true);
+  });
+
+  it('alerte quand on court trop vite en échauffement, jamais pendant la récupération', () => {
+    const { events } = run((z) => (z === 'ef' || z === 'rec' ? 0.75 : 1));
+    const alerts = events.filter((e) => e.type === 'pace_alert');
+    expect(alerts.length).toBeGreaterThan(0);
+    expect(alerts.every((a) => a.type === 'pace_alert' && a.direction === 'too_fast')).toBe(true);
+    expect(alerts[0].speech).toContain('Ralentis');
+  });
+
+  it('la séance guidée est validée grâce au découpage en blocs', () => {
+    const w = new LiveWorkout(vma);
+    w.start(0);
+    const [y, m, d0] = vma.date.split('-').map(Number);
+    const start = new Date(y, m - 1, d0, 18).getTime();
+    const track: Array<{ t: number; lat: number; lon: number; cadence: number; hr: number }> = [];
+    let lat = 48.85;
+    let lon = 2.35;
+    let t = 0;
+    let d = 0;
+    let heading = 0;
+    let seed = 7;
+    const rnd = () => ((seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296);
+    while (!w.finished) {
+      const s = w.current!;
+      const pace = ((s.pace.lo + s.pace.hi) / 2) * (0.97 + rnd() * 0.06);
+      t += 1;
+      const v = 1000 / pace;
+      d += v;
+      heading += (rnd() - 0.5) * 0.2;
+      lat += (v * Math.cos(heading)) / 111_320;
+      lon += (v * Math.sin(heading)) / (111_320 * Math.cos((lat * Math.PI) / 180));
+      track.push({ t: start + t * 1000 + Math.round((rnd() - 0.5) * 40), lat, lon, cadence: 170, hr: 150 });
+      w.update({ elapsedSec: t, distanceM: d, paceSecPerKm: pace, now: start + t * 1000 });
+    }
+    w.laps[0].start = start;
+    const act = { source: 'app_gps' as const, externalId: 'live', sport: 'running' as const, startTime: start, durationSec: t, distanceM: d, manual: false, track, laps: w.laps };
+    const v = evaluateSession(vma, act, analyzeActivity(act, start + t * 1000 + 60_000));
+    expect(v.status).toBe('validee');
+  });
+});
+
+describe('nutrition et échauffement', () => {
+  const plan = buildPlan(tenK45);
+  it('conseille avant, pendant et après selon la séance', () => {
+    const vma = plan.sessions.find((s) => s.type === 'vma')!;
+    const n = nutritionFor(vma, tenK45.goal);
+    expect(n.before.length).toBeGreaterThan(0);
+    expect(n.after.some((t) => t.text.includes('protéines'))).toBe(true);
+    expect(warmupAdvice(vma)).toContain('Échauffement');
+    const race = plan.sessions.at(-1)!;
+    expect(nutritionFor(race, tenK45.goal).before[0].when).toBe('Les 2 jours avant');
+  });
+  it('les séances intenses commencent par un échauffement avec accélérations', () => {
+    const vma = plan.sessions.find((s) => s.type === 'vma')!;
+    const steps = buildLiveSteps(vma);
+    expect(steps[0].label).toBe('Échauffement');
+    expect(steps[1].label).toBe('Accélération progressive');
+    expect(steps.at(-1)!.label).toBe('Retour au calme');
+  });
+});
+
+describe('défis entre joueurs', () => {
+  const day = 86_400_000;
+  const runs = [
+    { startTime: 1 * day, distanceM: 8000 },
+    { startTime: 3 * day, distanceM: 16000 },
+    { startTime: 9 * day, distanceM: 10000 },
+  ];
+  it('calcule distance, nombre de séances et plus longue sortie sur la période', () => {
+    const t = (id: string) => CHALLENGES.find((c) => c.id === id)!;
+    expect(challengeValue(t('duel7'), runs, 0, 7 * day)).toBe(24);
+    expect(challengeValue(t('three'), runs, 0, 7 * day)).toBe(2);
+    expect(challengeValue(t('long15'), runs, 0, 7 * day)).toBe(16);
+  });
+  it('classe les joueurs', () => {
+    const lb = leaderboard(CHALLENGES[0], [
+      { userId: 'a', value: 12 },
+      { userId: 'b', value: 30 },
+    ]);
+    expect(lb[0]).toMatchObject({ userId: 'b', rank: 1 });
+  });
+});

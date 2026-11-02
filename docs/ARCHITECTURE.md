@@ -75,3 +75,19 @@ Un score de confiance de 0 à 100 en découle : `trusted` (points crédités), `
 4. Candidature au Garmin Connect Developer Program, puis finalisation de `garmin-webhook` et `push-workout`.
 5. Activer App Attest et Play Integrity.
 6. Catalogue de récompenses réel : partenaires et codes dans `rewards` / `reward_codes`.
+
+## Séance guidée dans l'app (GPS du téléphone)
+
+- **Moteur** : `packages/core/src/liveWorkout.ts`. Il gère l'enchaînement des blocs, le décompte avant chaque changement, l'annonce vocale (allure, durée, distance), les alertes trop vite / trop lent (pas pendant les récupérations, avec un délai de grâce au début de chaque bloc et un intervalle minimal entre deux alertes), les kilomètres et la fin de séance. Il est testé.
+- **App** : `apps/mobile/src/lib/useRunSession.ts` (GPS, chronomètre, pause et reprise, voix via `expo-speech`, écran maintenu allumé) et l'écran `app/run/[id].tsx`.
+- **Validation** : l'activité est envoyée avec le début et la fin réels de chaque bloc (`laps`). Le serveur recalcule l'allure de chaque bloc à partir de la trace GPS vérifiée. Il ne fait jamais confiance aux allures calculées par le téléphone.
+- **Sécurité GPS** : les positions signalées comme simulées par Android (`mocked`) sont transmises et entraînent un refus. Les points imprécis (plus de 30 m) ou les sauts impossibles ne comptent pas dans la distance affichée. Le serveur applique ensuite tous les contrôles anti-triche.
+- **Limite actuelle** : dans Expo Go, le suivi GPS ne fonctionne qu'app ouverte (l'écran reste allumé). Le suivi écran verrouillé demande la version installée de l'app (`expo-task-manager` et la localisation en arrière-plan), à ajouter avec le premier build EAS.
+- **Mode simulation** (démo uniquement) : il fait « courir » la séance 5 fois plus vite, sans bouger, avec des boutons pour courir trop vite ou trop lentement et tester les alertes. Il est désactivé dès que l'app est reliée au serveur.
+
+## Hub social
+
+- **Tables** (`supabase/migrations/20261104000000_social_hub.sql`) : amis (par code ami), conversations et messages (temps réel), défis et participants, blocages et signalements.
+- **Confidentialité** : on ne voit les statistiques et on ne peut écrire qu'à ses amis. Les règles d'accès (RLS) l'imposent côté base, pas seulement dans l'app.
+- **Défis** : catalogue fixe dans `packages/core/src/challenges.ts`. Seules les activités vérifiées par l'anti-triche comptent. À la fin d'un défi, les gagnants reçoivent leurs points une seule fois (journal idempotent).
+- **Modération** (exigée par l'App Store pour tout contenu entre utilisateurs) : retirer, bloquer, signaler, plus une limite de 30 messages par minute.

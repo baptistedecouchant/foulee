@@ -33,6 +33,7 @@ npx supabase link --project-ref abcdefgh
 ```bash
 npx supabase db push
 ```
+(envoie toutes les migrations : plans, Strava, Hub social)
 
 ## 3. Créer l'application Strava
 
@@ -71,6 +72,8 @@ npm run sync:core
 ```bash
 npx supabase functions deploy
 ```
+
+Ensuite, dans **Database → Replication**, vérifie que la table `messages` est cochée pour le temps réel (la migration le fait normalement).
 
 ## 6. Abonner le serveur aux nouvelles séances Strava
 

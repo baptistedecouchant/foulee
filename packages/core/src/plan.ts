@@ -208,6 +208,11 @@ export function buildPlan(req: PlanRequest): Plan {
       ...o,
     });
     const warm = () => run('ef', { durationSec: 900, label: 'Échauffement' });
+    // Avant une séance intense : échauffement + accélérations progressives pour préparer cœur et muscles.
+    const warmIntense = (): Step[] => [
+      warm(),
+      { kind: 'repeat', times: 3, steps: [run('fart', { durationSec: 20, label: 'Accélération progressive' }), run('rec', { durationSec: 40 })] },
+    ];
     const cool = () => run('ef', { durationSec: 600, label: 'Retour au calme' });
 
     // progression dans la phase (0 → 1)
@@ -242,20 +247,20 @@ export function buildPlan(req: PlanRequest): Plan {
             const k = 6 + Math.round(t * 4);
             return {
               title: `VMA ${k} × 400 m`,
-              steps: [warm(), { kind: 'repeat', times: k, steps: [run('vma', { distanceM: 400 }), run('rec', { durationSec: 75 })] }, cool()],
+              steps: [...warmIntense(), { kind: 'repeat', times: k, steps: [run('vma', { distanceM: 400 }), run('rec', { durationSec: 75 })] }, cool()],
             };
           }
           if (variant === 1) {
             const k = 8 + Math.round(t * 4);
             return {
               title: `VMA ${k} × 1 min`,
-              steps: [warm(), { kind: 'repeat', times: k, steps: [run('vma', { durationSec: 60 }), run('rec', { durationSec: 60 })] }, cool()],
+              steps: [...warmIntense(), { kind: 'repeat', times: k, steps: [run('vma', { durationSec: 60 }), run('rec', { durationSec: 60 })] }, cool()],
             };
           }
           const k = 4 + Math.round(t * 2);
           return {
             title: `VMA ${k} × 800 m`,
-            steps: [warm(), { kind: 'repeat', times: k, steps: [run('vma', { distanceM: 800 }), run('rec', { durationSec: 120 })] }, cool()],
+            steps: [...warmIntense(), { kind: 'repeat', times: k, steps: [run('vma', { distanceM: 800 }), run('rec', { durationSec: 120 })] }, cool()],
           };
         }
         case 'seuil': {
@@ -276,7 +281,7 @@ export function buildPlan(req: PlanRequest): Plan {
           if (phase === 'taper') reps = Math.max(2, reps - 1);
           return {
             title: `Allure ${chrono ? 'objectif' : 'course'} ${reps} × ${fmtDist(dist)}`,
-            steps: [warm(), { kind: 'repeat', times: reps, steps: [run('spe', { distanceM: dist }), run('rec', { durationSec: 90 })] }, cool()],
+            steps: [...warmIntense(), { kind: 'repeat', times: reps, steps: [run('spe', { distanceM: dist }), run('rec', { durationSec: 90 })] }, cool()],
           };
         }
         case 'race':

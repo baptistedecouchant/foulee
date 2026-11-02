@@ -1,6 +1,7 @@
 import { NativeTabs } from 'expo-router/native-tabs';
 
 import { useTheme } from '@/hooks/use-theme';
+import { useSocial } from '@/lib/social';
 import { useStore } from '@/lib/store';
 
 // Barre d'onglets native : sur iOS 26 elle prend automatiquement l'apparence Liquid Glass
@@ -9,6 +10,11 @@ export default function TabsLayout() {
   const t = useTheme();
   const { quests } = useStore();
   const openQuests = quests.filter((q) => !q.done).length;
+  const { overview } = useSocial();
+  const hubBadge =
+    (overview?.incoming.length ?? 0) +
+    (overview?.challenges.filter((c) => c.myStatus === 'invited' && !c.finished).length ?? 0) +
+    (overview?.conversations.reduce((a, c) => a + c.unread, 0) ?? 0);
 
   return (
     <NativeTabs tintColor={t.accent} minimizeBehavior="onScrollDown">
@@ -21,6 +27,11 @@ export default function TabsLayout() {
         <NativeTabs.Trigger.Label>Entraînements</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="figure.run" md="directions_run" />
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="hub">
+        <NativeTabs.Trigger.Label>Hub</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf={{ default: 'person.3', selected: 'person.3.fill' }} md="groups" />
+        {hubBadge > 0 ? <NativeTabs.Trigger.Badge>{String(hubBadge)}</NativeTabs.Trigger.Badge> : null}
+      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="coach">
         <NativeTabs.Trigger.Label>Coach</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf={{ default: 'bubble.left.and.bubble.right', selected: 'bubble.left.and.bubble.right.fill' }} md="forum" />
@@ -28,10 +39,6 @@ export default function TabsLayout() {
       <NativeTabs.Trigger name="rewards">
         <NativeTabs.Trigger.Label>Récompenses</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf={{ default: 'trophy', selected: 'trophy.fill' }} md="emoji_events" />
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="devices">
-        <NativeTabs.Trigger.Label>Montres</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="applewatch" md="watch" />
       </NativeTabs.Trigger>
     </NativeTabs>
   );
