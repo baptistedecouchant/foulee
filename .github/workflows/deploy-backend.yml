@@ -49,8 +49,8 @@ jobs:
       - name: Base de données
         if: env.SKIP != '1'
         run: |
-          supabase link --project-ref "$PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
-          supabase db push --linked --password "$SUPABASE_DB_PASSWORD" --include-all
+          supabase link --project-ref "$PROJECT_REF"
+          supabase db push --remote --password "$SUPABASE_DB_PASSWORD" --include-all --yes
 
       - name: Secrets des fonctions
         if: env.SKIP != '1'
@@ -65,12 +65,12 @@ jobs:
             v="${!k}"; [ -n "$v" ] && echo "$k=$v" >> secrets.env
           done
           echo "APP_INTEGRITY_ENFORCED=false" >> secrets.env
-          supabase secrets set --env-file secrets.env --project-ref "$PROJECT_REF"
+          supabase secrets set --env-file secrets.env --project-ref "$PROJECT_REF" --yes
           rm secrets.env
 
       - name: Fonctions
         if: env.SKIP != '1'
-        run: supabase functions deploy --project-ref "$PROJECT_REF"
+        run: supabase functions deploy --project-ref "$PROJECT_REF" --yes
 
       - name: Abonnement Strava (nouvelles séances en temps réel)
         if: env.SKIP != '1'
