@@ -1,0 +1,202 @@
+// Pipeline unique pour toute activité reçue (Garmin, Strava, Apple Santé, Health Connect…) :
+// 1. anti-triche  2. dédoublonnage  3. rapprochement avec la séance prévue
+// 4. validation  5. points (journal idempotent, plafond quotidien)
+
+import type { SupabaseClient } from '@supabase/supabase-js';
+import {
+  analyzeActivity,
+  computeLedger,
+  evaluateSession,
+  isDuplicate,
+  isInWindow,
+  POINTS,
+  SOURCE_PRIORITY,
+  trackFingerprint,
+  type Activity,
+  type Plan,
+  type PlannedSession,
+  type SessionValidation,
+} from './core/index.ts';
+
+export interface IngestResult {
+  status: 'stored' | 'duplicate' | 'rejected' | 'no_session';
+  activityId?: string;
+  validation?: SessionValidation;
+}
+
+export async function ingestActivity(db: SupabaseClient, userId: string, activity: Activity): Promise<IngestResult> {
+  const trust = analyzeActivity(activity);
+  const fingerprint = activity.track ? trackFingerprint(activity.track) : null;
+
+  // Trace déjà utilisée (par ce compte ou un autre) → refus.
+  if (fingerprint) {
+    const { data: same } = await db
+      .from('activities')
+      .select('id, user_id, source, external_id')
+      .eq('track_fingerprint', fingerprint)
+      .is('duplicate_of', null)
+      .neq('trust_verdict', 'rejected')
+      .maybeSingle();
+    if (same && !(same.source === activity.source && same.external_id === activity.externalId)) {
+      trust.flags.push({ code: 'TIMESTAMPS_INVALID', severity: 'critical', message: 'Cette trace GPS a déjà été envoyée.' });
+      trust.verdict = 'rejected';
+      trust.trustScore = 0;
+    }
+  }
+
+  // Même sortie reçue par une autre source (ex. Garmin puis Strava).
+  const dayMs = 86_400_000;
+  const { data: nearby } = await db
+    .from('activities')
+    .select('id, source, external_id, start_time, duration_sec')
+    .eq('user_id', userId)
+    .gte('start_time', new Date(activity.startTime - dayMs).toISOString())
+    .lte('start_time', new Date(activity.startTime + dayMs).toISOString())
+    .is('duplicate_of', null);
+  const twin = (nearby ?? []).find((a) =>
+    isDuplicate(activity, {
+      ...activity,
+      source: a.source,
+      startTime: new Date(a.start_time).getTime(),
+      durationSec: a.duration_sec,
+    }),
+  );
+  const isWeaker = twin && SOURCE_PRIORITY[activity.source] >= SOURCE_PRIORITY[twin.source as Activity['source']];
+
+  const { data: inserted, error } = await db
+    .from('activities')
+    .upsert(
+      {
+        user_id: userId,
+        source: activity.source,
+        external_id: activity.externalId,
+        start_time: new Date(activity.startTime).toISOString(),
+        duration_sec: Math.round(activity.durationSec),
+        distance_m: Math.round(activity.distanceM),
+        manual: activity.manual,
+        indoor: activity.indoor ?? false,
+        device_name: activity.deviceName,
+        track_fingerprint: isWeaker ? null : fingerprint,
+        trust_verdict: trust.verdict,
+        trust_score: trust.trustScore,
+        trust_flags: trust.flags,
+        duplicate_of: isWeaker ? twin!.id : null,
+      },
+      { onConflict: 'source,external_id' },
+    )
+    .select('id')
+    .single();
+  if (error) throw error;
+
+  if (isWeaker) return { status: 'duplicate', activityId: inserted.id };
+
+  // Abaisse la confiance du compte en cas de triche avérée ; suspend les récompenses après plusieurs refus.
+  if (trust.verdict === 'rejected' && !activity.manual) {
+    const { count } = await db
+      .from('activities')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('trust_verdict', 'rejected')
+      .eq('manual', false);
+    await db
+      .from('profiles')
+      .update({ trust_level: Math.max(0, 100 - (count ?? 1) * 25), rewards_suspended: (count ?? 0) >= 3 })
+      .eq('id', userId);
+  }
+
+  // Rapprochement : séance prévue la plus proche, non encore validée.
+  const { data: planRow } = await db.from('plans').select('id, plan').eq('user_id', userId).eq('status', 'active').maybeSingle();
+  if (!planRow) return { status: trust.verdict === 'rejected' ? 'rejected' : 'no_session', activityId: inserted.id };
+  const plan = planRow.plan as Plan;
+
+  const { data: done } = await db.from('session_validations').select('session_id, status').eq('plan_id', planRow.id);
+  const alreadyOk = new Set((done ?? []).filter((d) => d.status === 'validee').map((d) => d.session_id));
+  const candidates = plan.sessions.filter((s) => !alreadyOk.has(s.id) && isInWindow(s, activity.startTime));
+  if (!candidates.length) return { status: trust.verdict === 'rejected' ? 'rejected' : 'no_session', activityId: inserted.id };
+
+  const startDay = new Date(activity.startTime).toISOString().slice(0, 10);
+  const session: PlannedSession =
+    candidates.find((s) => s.date === startDay) ??
+    candidates.sort((a, b) => Math.abs(a.durationSec - activity.durationSec) - Math.abs(b.durationSec - activity.durationSec))[0];
+
+  const validation = evaluateSession(session, activity, trust);
+
+  // Une meilleure exécution remplace une moins bonne, jamais l'inverse.
+  const prev = (done ?? []).find((d) => d.session_id === session.id);
+  const { data: prevRow } = prev
+    ? await db.from('session_validations').select('points').eq('plan_id', planRow.id).eq('session_id', session.id).single()
+    : { data: null };
+  if (!prevRow || validation.points > prevRow.points) {
+    await db.from('session_validations').upsert({
+      plan_id: planRow.id,
+      session_id: session.id,
+      user_id: userId,
+      activity_id: inserted.id,
+      status: validation.status,
+      score: validation.score,
+      volume_score: Math.round(validation.volumeScore * 100) / 100,
+      intensity_score: Math.round(validation.intensityScore * 100) / 100,
+      points: validation.points,
+      feedback: validation.feedback,
+    });
+  }
+
+  await syncLedger(db, userId, planRow.id, plan);
+  return { status: trust.verdict === 'rejected' ? 'rejected' : 'stored', activityId: inserted.id, validation };
+}
+
+/** Recalcule les points dus et n'insère que les lignes manquantes (idempotent). */
+async function syncLedger(db: SupabaseClient, userId: string, planId: string, plan: Plan) {
+  const { data: profile } = await db.from('profiles').select('rewards_suspended').eq('id', userId).single();
+  if (profile?.rewards_suspended) return;
+
+  const { data: rows } = await db.from('session_validations').select('*').eq('plan_id', planId);
+  const validations: Record<string, SessionValidation> = {};
+  for (const r of rows ?? []) {
+    validations[r.session_id] = {
+      sessionId: r.session_id,
+      status: r.status,
+      score: Number(r.score),
+      volumeScore: Number(r.volume_score),
+      intensityScore: Number(r.intensity_score),
+      points: r.points,
+      feedback: r.feedback,
+    };
+  }
+
+  const due = computeLedger(plan, validations);
+  const { data: existing } = await db.from('points_ledger').select('kind, ref, points, created_at').eq('user_id', userId);
+  // points déjà versés par référence (ligne d'origine + ajustements)
+  const have = new Map<string, number>();
+  for (const e of existing ?? []) {
+    if (e.kind === 'redeem') continue;
+    const base = e.ref.split(':adj:')[0];
+    have.set(base, (have.get(base) ?? 0) + e.points);
+  }
+
+  // Plafond quotidien sur les points de séance.
+  const today = new Date().toISOString().slice(0, 10);
+  let todaySession = (existing ?? [])
+    .filter((e) => e.kind === 'session' && e.created_at.slice(0, 10) === today)
+    .reduce((a, e) => a + e.points, 0);
+
+  for (const entry of due) {
+    const ref = `${planId}:${entry.ref ?? entry.kind}`;
+    const prev = have.get(ref);
+    if (prev != null && prev >= entry.points) continue;
+    let pts = entry.points - (prev ?? 0);
+    if (entry.kind === 'session') {
+      pts = Math.min(pts, Math.max(0, POINTS.dailyCap - todaySession));
+      todaySession += pts;
+      if (pts <= 0) continue;
+    }
+    // amélioration d'une séance déjà payée : ligne d'ajustement distincte
+    await db.from('points_ledger').insert({
+      user_id: userId,
+      kind: prev != null ? 'adjustment' : entry.kind,
+      label: entry.label,
+      points: pts,
+      ref: prev != null ? `${ref}:adj:${Date.now()}` : ref,
+    });
+  }
+}

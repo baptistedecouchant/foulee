@@ -1,0 +1,10 @@
+{
+  "name": "foulee",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "test": "npm run test -w @foulee/core",
+    "typecheck": "npm run typecheck -w @foulee/core && npm run typecheck -w mobile",
+    "sync:core": "node scripts/sync-core.mjs"
+  }
+}

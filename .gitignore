@@ -1,0 +1,11 @@
+node_modules/
+.expo/
+dist/
+*.log
+.env
+.env.*
+!.env.example
+apps/mobile/ios/
+apps/mobile/android/
+supabase/.temp/
+supabase/functions/_shared/core/
