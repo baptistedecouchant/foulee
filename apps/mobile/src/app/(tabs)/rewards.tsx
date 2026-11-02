@@ -192,6 +192,8 @@ export default function RewardsScreen() {
               ['Semaine complète', `+${ECONOMY.weekComplete} RC`],
               ['Challenge sponsorisé réussi', `+${ECONOMY.sponsoredChallenge} RC`],
               ['Pub vidéo regardée', `+${ECONOMY.adReward} RC`],
+              ['Bonus de bienvenue (compte créé + 1re séance validée)', `+${ECONOMY.welcomeBonus} RC`],
+              ['Coffre : 7 jours de connexion d’affilée', `+${ECONOMY.streakChest} RC`],
               ['Défis entre amis, badges, objectif atteint', 'XP'],
               ['Saisie manuelle ou trace suspecte', '0'],
             ].map(([k, v]) => (

@@ -15,7 +15,7 @@ create policy "pubs : lecture" on public.ad_views for select using (auth.uid() =
 -- Types de gains possibles dans le journal
 alter table public.points_ledger drop constraint if exists points_ledger_kind_check;
 alter table public.points_ledger add constraint points_ledger_kind_check
-  check (kind in ('session', 'week', 'ad', 'sponsored', 'redeem', 'adjustment', 'plan', 'goal', 'challenge'));
+  check (kind in ('session', 'week', 'ad', 'sponsored', 'welcome', 'chest', 'redeem', 'adjustment', 'plan', 'goal', 'challenge'));
 
 -- Challenges sponsorisés par des marques (remplacent la rotation par défaut quand ils existent).
 create table public.sponsored_challenges (

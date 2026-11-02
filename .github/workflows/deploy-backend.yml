@@ -50,7 +50,7 @@ jobs:
         if: env.SKIP != '1'
         run: |
           supabase link --project-ref "$PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
-          supabase db push --password "$SUPABASE_DB_PASSWORD"
+          supabase db push --linked --password "$SUPABASE_DB_PASSWORD" --include-all
 
       - name: Secrets des fonctions
         if: env.SKIP != '1'

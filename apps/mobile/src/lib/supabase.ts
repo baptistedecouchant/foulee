@@ -10,16 +10,34 @@ export const isDemo = !url || !anonKey;
 
 // Les jetons de session sont rangés dans le trousseau iOS / Keystore Android,
 // pas dans un stockage en clair.
+// Le trousseau iOS est fiable jusqu'à ~2 Ko par valeur : la session est découpée en morceaux.
+const CHUNK = 1800;
 const secureStorage = {
-  getItem: (key: string) => SecureStore.getItemAsync(key),
-  setItem: (key: string, value: string) => SecureStore.setItemAsync(key, value),
-  removeItem: (key: string) => SecureStore.deleteItemAsync(key),
+  async getItem(key: string): Promise<string | null> {
+    const n = await SecureStore.getItemAsync(`${key}.n`);
+    if (!n) return SecureStore.getItemAsync(key);
+    const parts = await Promise.all(Array.from({ length: Number(n) }, (_, i) => SecureStore.getItemAsync(`${key}.${i}`)));
+    return parts.some((p) => p == null) ? null : parts.join('');
+  },
+  async setItem(key: string, value: string): Promise<void> {
+    const parts = value.match(new RegExp(`.{1,${CHUNK}}`, 'gs')) ?? [''];
+    await Promise.all(parts.map((p, i) => SecureStore.setItemAsync(`${key}.${i}`, p)));
+    await SecureStore.setItemAsync(`${key}.n`, String(parts.length));
+  },
+  async removeItem(key: string): Promise<void> {
+    const n = Number((await SecureStore.getItemAsync(`${key}.n`)) ?? 0);
+    await Promise.all([
+      ...Array.from({ length: n }, (_, i) => SecureStore.deleteItemAsync(`${key}.${i}`)),
+      SecureStore.deleteItemAsync(`${key}.n`),
+      SecureStore.deleteItemAsync(key),
+    ]);
+  },
 };
 
 export const supabase = isDemo
   ? null
   : createClient(url!, anonKey!, {
-      auth: { storage: secureStorage, autoRefreshToken: true, persistSession: true, detectSessionInUrl: false },
+      auth: { storage: secureStorage, autoRefreshToken: true, persistSession: true, detectSessionInUrl: false, flowType: 'pkce' },
     });
 
 /** Appel d'une fonction serveur avec le jeton de l'utilisateur. */

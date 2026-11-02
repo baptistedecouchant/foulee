@@ -11,6 +11,11 @@ import {
   type Activity,
   type SessionValidation,
   applyCaps,
+  chestEarnings,
+  LOGIN_XP,
+  loginStreak,
+  tipOfDay,
+  type DailyTip,
   computeLedger,
   ECONOMY,
   sponsoredChallengeOf,
@@ -81,6 +86,10 @@ interface PersistedState {
   ads: Array<{ date: string; ref: string }>;
   /** Challenges sponsorisés réclamés (démo). */
   sponsoredClaims: string[];
+  /** Jours où l'app a été ouverte (série de connexion). */
+  checkins: string[];
+  /** Astuces du jour lues (identifiant = date). */
+  tipsRead: string[];
   /** Solde serveur (mode connecté). */
   serverBalance?: number;
   /** Historique serveur des gains (mode connecté). */
@@ -93,6 +102,8 @@ const INITIAL: PersistedState = {
   redemptions: [],
   ads: [],
   sponsoredClaims: [],
+  checkins: [],
+  tipsRead: [],
 };
 
 const KEY = 'foulee/state/v2';
@@ -113,6 +124,12 @@ function earningsOf(s: PersistedState): Earning[] {
   const out: Earning[] = [];
   for (const p of s.plans) out.push(...computeLedger(p.plan, p.validations, `${p.id}:`));
   for (const a of s.ads) out.push({ kind: 'ad', label: 'Pub regardée', amount: ECONOMY.adReward, date: a.date, ref: a.ref });
+  out.push(...chestEarnings(s.checkins));
+  // Bonus de bienvenue : après la première séance validée (en ligne : compte relié requis, vérifié par le serveur).
+  const first = s.plans
+    .flatMap((p) => p.plan.sessions.filter((x) => p.validations[x.id]?.status === 'validee').map((x) => x.date))
+    .sort()[0];
+  if (first) out.push({ kind: 'welcome', label: 'Bonus de bienvenue', amount: ECONOMY.welcomeBonus, date: first, ref: 'welcome' });
   for (const w of s.sponsoredClaims) out.push({ kind: 'sponsored', label: `Challenge sponsorisé (${w})`, amount: ECONOMY.sponsoredChallenge, date: w, ref: `sp-${w}` });
   return out;
 }
@@ -141,6 +158,11 @@ interface Store extends PersistedState {
   /** Pub récompensée. Renvoie les RC crédités (0 si plafond atteint ou pub non terminée). */
   watchAd(play: () => Promise<boolean>): Promise<number>;
   adsMode: 'native' | 'demo' | 'off';
+  /** Jours d'affilée où l'app a été ouverte. */
+  loginDays: number;
+  tip: DailyTip;
+  tipRead: boolean;
+  readTip(): void;
   steps: number | null;
   health: 'unavailable' | 'available' | 'connected';
   connectHealth(): Promise<number>;
@@ -319,7 +341,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [healthOk, state.connections.apple_health]);
   const progress = useMemo(() => state.plans.map((p) => ({ plan: p.plan, validations: p.validations })), [state.plans]);
   const stats = useMemo(() => computeStats(progress, todayIso()), [progress]);
-  const level = useMemo(() => levelInfo(stats.xp), [stats.xp]);
+  // XP de connexion : jamais de RC, seulement de la progression.
+  const extraXp = useMemo(
+    () => state.checkins.length * LOGIN_XP.perDay + chestEarnings(state.checkins).length * LOGIN_XP.chest + state.tipsRead.length * LOGIN_XP.tip,
+    [state.checkins, state.tipsRead],
+  );
+  const level = useMemo(() => levelInfo(stats.xp + extraXp), [stats.xp, extraXp]);
+  const loginDays = useMemo(() => loginStreak(state.checkins, todayIso()), [state.checkins]);
+
+  // Connexion du jour : une fois par jour à l'ouverture de l'app.
+  useEffect(() => {
+    if (!ready) return;
+    const today = todayIso();
+    if (state.checkins.includes(today)) return;
+    setState((st) => (st.checkins.includes(today) ? st : { ...st, checkins: [...st.checkins, today].slice(-400) }));
+    if (!isDemo) {
+      callFunction<{ days: string[] }>('check-in', {})
+        .then((r) => r.days && setState((st) => ({ ...st, checkins: r.days })))
+        .then(() => refresh())
+        .catch(() => {});
+    }
+  }, [ready, state.checkins, refresh]);
   const quests = useMemo(() => weeklyQuests(progress, mondayOf(todayIso())), [progress]);
 
   const createPlan = useCallback(async (req: PlanRequest) => {
@@ -352,7 +394,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       p.id === planId ? { plan: p.plan, validations: { ...p.validations, [sessionId]: result } } : { plan: p.plan, validations: p.validations },
     );
     const newStats = computeStats(after, todayIso());
-    const newLevel = levelInfo(newStats.xp);
+    const newLevel = levelInfo(newStats.xp + extraXp);
     updatePlan(planId, (p) => ({ ...p, validations: { ...p.validations, [sessionId]: result } }));
     setCelebration({
       points: Math.max(0, result.points - (prev?.points ?? 0)),
@@ -401,6 +443,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     ...state,
     room,
     sponsored,
+    loginDays,
+    tip: tipOfDay(todayIso()),
+    tipRead: state.tipsRead.includes(todayIso()),
+    readTip: () => {
+      const today = todayIso();
+      if (state.tipsRead.includes(today)) return;
+      setState((st) => ({ ...st, tipsRead: [...st.tipsRead, today].slice(-400) }));
+      Haptics.selectionAsync().catch(() => {});
+    },
     steps,
     health: !healthOk ? 'unavailable' : state.connections.apple_health ? 'connected' : 'available',
     adsMode: nativeAdsAvailable() ? 'native' : isDemo ? 'demo' : 'off',

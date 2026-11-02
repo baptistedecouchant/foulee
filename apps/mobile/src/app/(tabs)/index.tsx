@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { BADGES, ECONOMY, formatDuration } from '@foulee/core';
+import { BADGES, ECONOMY, formatDuration, LOGIN_XP } from '@foulee/core';
 
 import { Button, Card, Chip, Ionicons, LevelBadge, ProgressBar, Row, SectionTitle, StatPill, Txt } from '@/components/ui';
 import { GradientCard, PhotoCard } from '@/components/visuals';
@@ -14,7 +14,7 @@ import { formatDateFr, MAX_ACTIVE_PLANS, todayIso, useStore } from '@/lib/store'
 export default function HomeScreen() {
   const t = useTheme();
   const top = useTopInset();
-  const { plans, stats, level, quests, balance, steps, health, sponsored, claimSponsored } = useStore();
+  const { plans, stats, level, quests, balance, steps, health, sponsored, claimSponsored, loginDays, tip, tipRead, readTip } = useStore();
   const today = todayIso();
 
   // Prochaine séance à faire, tous entraînements confondus.
@@ -41,6 +41,9 @@ export default function HomeScreen() {
             </Txt>
           </View>
           <Row>
+            <Pressable accessibilityRole="button" accessibilityLabel="Mon compte" onPress={() => router.push('/account')} style={styles.watchBtn}>
+              <Ionicons name="person" size={20} color="#fff" />
+            </Pressable>
             <Pressable accessibilityRole="button" accessibilityLabel="Montres et apps" onPress={() => router.push('/devices')} style={styles.watchBtn}>
               <Ionicons name="watch" size={22} color="#fff" />
             </Pressable>
@@ -60,6 +63,7 @@ export default function HomeScreen() {
         </View>
         <Row>
           <StatPill icon="flame" value={`${stats.streak} série`} color="#fff" bg="rgba(255,106,43,0.9)" />
+          <StatPill icon="calendar" value={`${loginDays} j`} color="#fff" bg="rgba(255,255,255,0.18)" />
           <StatPill icon="cash" value={`${fmtInt(balance)} RC`} color={t.goldText} bg={t.gold} />
           <StatPill icon="flash" value={`${fmtInt(stats.xp)} XP`} color="#04281B" bg={t.xp} />
         </Row>
@@ -114,6 +118,36 @@ export default function HomeScreen() {
           </PhotoCard>
         </>
       ) : null}
+
+      {/* ---------- Série de connexion et coffre ---------- */}
+      <Card style={{ gap: Spacing.s }}>
+        <Row style={{ justifyContent: 'space-between' }}>
+          <Row>
+            <Ionicons name="calendar" size={20} color={t.flame} />
+            <Txt style={{ fontWeight: '800' }}>{loginDays} jour{loginDays > 1 ? 's' : ''} d’affilée</Txt>
+          </Row>
+          <Chip tone={loginDays > 0 && loginDays % 7 === 0 ? 'gold' : 'neutral'} icon="cube" label={loginDays > 0 && loginDays % 7 === 0 ? 'Coffre ouvert !' : `Coffre dans ${7 - (loginDays % 7)} j`} />
+        </Row>
+        <Row style={{ gap: 6 }}>
+          {Array.from({ length: 7 }).map((_, i) => (
+            <View key={i} style={[styles.day, { backgroundColor: i < (loginDays % 7 || (loginDays > 0 ? 7 : 0)) ? t.flame : t.surfaceAlt }]} />
+          ))}
+        </Row>
+        <Txt variant="caption" muted>
+          Ouvre Foulée chaque jour : +{LOGIN_XP.perDay} XP par jour, et un coffre de {ECONOMY.streakChest} RC tous les 7 jours.
+        </Txt>
+      </Card>
+
+      {/* ---------- Astuce du jour ---------- */}
+      <Card>
+        <Row style={{ justifyContent: 'space-between' }}>
+          <Chip tone="accent" icon="bulb" label={`Astuce · ${tip.category}`} />
+          {tipRead ? <Chip tone="ok" icon="checkmark" label={`+${LOGIN_XP.tip} XP`} /> : null}
+        </Row>
+        <Txt style={{ fontWeight: '800' }}>{tip.title}</Txt>
+        <Txt muted>{tip.text}</Txt>
+        {!tipRead && <Button kind="secondary" small icon="checkmark" label={`J’ai lu (+${LOGIN_XP.tip} XP)`} onPress={readTip} />}
+      </Card>
 
       {/* ---------- Challenge sponsorisé de la semaine ---------- */}
       <SectionTitle>Challenge de la semaine</SectionTitle>
@@ -261,6 +295,7 @@ function Total({ icon, value, label }: { icon: 'map' | 'time' | 'checkmark-done'
 const styles = StyleSheet.create({
   page: { padding: Spacing.l, gap: Spacing.l, paddingBottom: 120 },
   addCard: { width: 170, height: 190, borderRadius: Radius.l, borderWidth: 2, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', gap: Spacing.s, padding: Spacing.m },
+  day: { flex: 1, height: 10, borderRadius: 5 },
   watchBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' },
   badgeIcon: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
 });

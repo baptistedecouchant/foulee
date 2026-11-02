@@ -7,7 +7,7 @@ alter table public.profiles add column if not exists city text;
 alter table public.profiles add column if not exists avatar_color text default '#3A4BFF';
 
 create or replace function public.gen_friend_code() returns text language sql as $$
-  select upper(substr(translate(encode(gen_random_bytes(6), 'base64'), '+/=0O1Il', ''), 1, 6));
+  select upper(substr(translate(encode(extensions.gen_random_bytes(6), 'base64'), '+/=0O1Il', ''), 1, 6));
 $$;
 update public.profiles set friend_code = public.gen_friend_code() where friend_code is null;
 alter table public.profiles alter column friend_code set default public.gen_friend_code();

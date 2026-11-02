@@ -10,6 +10,7 @@ import {
   isDuplicate,
   isInWindow,
   applyCaps,
+  chestEarnings,
   ECONOMY,
   mondayOf,
   sponsoredChallengeOf,
@@ -207,6 +208,19 @@ export async function syncLedger(db: SupabaseClient, userId: string) {
   const runs = (acts ?? []).map((a) => ({ startTime: new Date(a.start_time).getTime(), distanceM: a.distance_m }));
   if (sponsoredProgress(challenge, runs, week) >= challenge.target) {
     earnings.push({ kind: 'sponsored', label: `Challenge : ${challenge.title}`, amount: ECONOMY.sponsoredChallenge, date: week, ref: `sp:${week}` });
+  }
+
+  // Coffres de la série de connexion
+  const { data: checkins } = await db.from('daily_checkins').select('day').eq('user_id', userId);
+  earnings.push(...chestEarnings((checkins ?? []).map((c) => c.day)));
+
+  // Bonus de bienvenue : compte relié (pas anonyme) ET au moins une séance validée par l'anti-triche.
+  const firstValidated = (rows ?? []).filter((r) => r.status === 'validee').sort((a, b) => a.created_at.localeCompare(b.created_at))[0];
+  if (firstValidated) {
+    const { data: u } = await db.auth.admin.getUserById(userId);
+    if (u?.user && !u.user.is_anonymous) {
+      earnings.push({ kind: 'welcome', label: 'Bonus de bienvenue', amount: ECONOMY.welcomeBonus, date: firstValidated.created_at.slice(0, 10), ref: 'welcome' });
+    }
   }
 
   const granted = applyCaps(earnings);

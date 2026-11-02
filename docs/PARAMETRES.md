@@ -173,6 +173,8 @@ Repère marché : WeWard plafonne la marche à ~25 Wards par jour, soit environ 
 | Semaine complète | **150** | 0,15 |
 | Challenge sponsorisé réussi | **200** | 0,20 (financé par la marque) |
 | Pub vidéo regardée (30 s) | **10** | 0,01 |
+| Bonus de bienvenue (une fois, compte relié + 1re séance validée) | **100** | 0,10 |
+| Coffre : 7 jours de connexion d'affilée (1 par semaine) | **20** | 0,02 |
 | Défis entre amis, badges, plan terminé, objectif atteint | 0 RC | uniquement de l'XP |
 
 | Plafond | Valeur |
@@ -291,6 +293,8 @@ Fichier : `packages/core/src/gamification.ts`
 | XP plan terminé | +1 000 |
 | Série | séances validées d'affilée ; une séance passée non faite la casse |
 | Points ≠ XP | les points se dépensent, l'XP ne baisse jamais |
+
+Connexion quotidienne (`loginStreak`, `chestEarnings`, `LOGIN_XP` dans `economy.ts`) : +10 XP par jour d'ouverture de l'app, +50 XP et 20 RC tous les 7 jours d'affilée, et +5 XP pour l'astuce du jour lue (12 astuces dans `tips.ts`). La date est celle du serveur (heure de Paris), ce qui empêche de tricher en changeant l'heure du téléphone.
 
 Badges (13) :
 

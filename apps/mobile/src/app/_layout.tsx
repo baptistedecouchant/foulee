@@ -32,6 +32,7 @@ function Navigator() {
         <Stack.Screen name="session/[id]" options={{ title: '' }} />
         <Stack.Screen name="run/[id]" options={{ presentation: 'fullScreenModal', headerShown: false, gestureEnabled: false }} />
         <Stack.Screen name="devices" options={{ title: 'Montres & apps' }} />
+        <Stack.Screen name="account" options={{ title: 'Mon compte' }} />
         <Stack.Screen name="player/[id]" options={{ title: '' }} />
         <Stack.Screen name="chat/[id]" options={{ title: '' }} />
         <Stack.Screen name="challenge/new" options={{ presentation: 'modal', title: 'Lancer un défi' }} />

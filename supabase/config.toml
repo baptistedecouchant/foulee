@@ -5,6 +5,8 @@ project_id = "foulee"
 # Connexion anonyme : l'utilisateur commence sans créer de compte,
 # il pourra ensuite lier un e-mail ou Apple/Google.
 enable_anonymous_sign_ins = true
+# Relier un compte invité à un e-mail, Google ou Apple sans perdre ses données.
+enable_manual_linking = true
 
 # Fonctions appelées par des serveurs tiers ou un navigateur, sans jeton utilisateur.
 [functions.strava-callback]
