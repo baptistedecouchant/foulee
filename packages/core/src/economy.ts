@@ -1,27 +1,27 @@
-// Économie RunCoin (RC). 100 RC = 1 €.
+// Économie RunCoin (RC). 1 000 RC = 1 €.
 //
 // TOUT le barème et TOUS les plafonds sont ici, en un seul endroit : l'app (démo) et le serveur
 // appliquent exactement les mêmes règles. Le serveur fait foi : il est le seul à créditer des RC.
 //
-// Objectif (business plan) : un utilisateur assidu gagne ~500 RC (5 €) en 2 mois, jamais plus de
-// ~550 RC, quoi qu'il fasse. Les plafonds garantissent ce maximum même pour un tricheur ou un
-// utilisateur qui regarde des pubs en boucle.
+// Repère marché : WeWard plafonne la marche à ~25 Wards/jour (~0,15 €/jour au maximum,
+// quelques euros par mois en pratique). Foulée reste en dessous :
+//   - au plus 150 RC/jour d'activité (0,15 €), 3 000 RC/mois (3 €) tous gains confondus ;
+//   - un coureur assidu (3 séances/semaine) gagne ~4 800 RC (4,80 €) en 2 mois.
 
 export const ECONOMY = {
   /** Valeur d'1 RC en euros. */
-  euroPerRc: 0.01,
+  euroPerRc: 0.001,
 
   /** Gains */
-  sessionValidated: 10, // séance validée (allure ou distance atteinte)
-  sessionPartial: 5, // séance validée en partie
-  weekComplete: 15, // toutes les séances de la semaine faites
+  sessionValidated: 100, // séance validée (allure ou distance atteinte) = 0,10 €
+  sessionPartial: 50, // séance validée en partie
+  weekComplete: 150, // toutes les séances de la semaine faites
   /**
-   * Pub vidéo récompensée. ⚠️ Avec un CPM de 12 €, une vue rapporte 0,012 € :
-   * verser 2 RC (0,02 €) fait PERDRE 0,008 € par vue. À 1 RC (0,01 €) on reste à l'équilibre.
-   * Ne remonter à 2 RC que si le CPM réel mesuré dépasse 20 €.
+   * Pub vidéo récompensée = 0,01 €. Avec un CPM de 12 €, une vue rapporte 0,012 € :
+   * marge de 0,002 € par vue. Ne pas dépasser 12 RC sans CPM réel mesuré plus élevé.
    */
-  adReward: 1,
-  sponsoredChallenge: 20, // challenge de la semaine financé par une marque
+  adReward: 10,
+  sponsoredChallenge: 200, // challenge de la semaine financé par une marque
 
   /** Plafonds (anti-faillite et anti-abus) */
   caps: {
@@ -30,8 +30,10 @@ export const ECONOMY = {
     adsPerDay: 3,
     adsPerWeek: 10,
     sponsoredPerWeek: 1,
-    weeklyTotal: 75, // tous gains confondus, par semaine (lundi → dimanche)
-    monthlyTotal: 275, // par mois calendaire → ~550 RC max en 2 mois
+    /** Activité du jour (séances + pubs) : jamais plus que le maximum quotidien de WeWard. */
+    activityPerDay: 150,
+    weeklyTotal: 750, // tous gains confondus, par semaine (lundi → dimanche)
+    monthlyTotal: 3000, // par mois calendaire = 3 € maximum
   },
 } as const;
 
@@ -100,6 +102,15 @@ export function applyCaps(earnings: Earning[]): GrantedEarning[] {
       capped = 'quota';
     }
 
+    // Plafond d'activité quotidienne (séances + pubs)
+    if (e.kind === 'session' || e.kind === 'ad') {
+      const leftDay = c.activityPerDay - (sum.get(`d:${day}`) ?? 0);
+      if (amount > leftDay) {
+        amount = Math.max(0, leftDay);
+        capped = 'jour';
+      }
+    }
+
     // Plafonds de montant
     const leftWeek = c.weeklyTotal - (sum.get(`w:${week}`) ?? 0);
     const leftMonth = c.monthlyTotal - (sum.get(`m:${month}`) ?? 0);
@@ -114,6 +125,7 @@ export function applyCaps(earnings: Earning[]): GrantedEarning[] {
 
     if (amount > 0) {
       quota[e.kind].forEach(([k]) => inc(count, k, 1));
+      if (e.kind === 'session' || e.kind === 'ad') inc(sum, `d:${day}`, amount);
       inc(sum, `w:${week}`, amount);
       inc(sum, `m:${month}`, amount);
     }

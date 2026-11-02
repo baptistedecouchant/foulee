@@ -259,7 +259,7 @@ describe('validation et points', () => {
     const { s, act } = runSession(vma.id, (p) => p);
     const v = evaluateSession(s, act, analyzeActivity(act, NOW));
     expect(v.status).toBe('validee');
-    expect(v.points).toBe(10);
+    expect(v.points).toBe(ECONOMY.sessionValidated);
   });
 
   it('pénalise un footing couru trop vite', () => {
@@ -453,7 +453,7 @@ import { applyCaps, ECONOMY, sponsoredChallengeOf, sponsoredProgress, weeklyRoom
 
 describe('économie RunCoin', () => {
   const day = (d: number) => `2026-11-${String(d).padStart(2, '0')}`; // 2 nov. 2026 = lundi
-  const session = (d: number, n = 0): Earning => ({ kind: 'session', label: 's', amount: 10, date: day(d), ref: `s${d}-${n}` });
+  const session = (d: number, n = 0): Earning => ({ kind: 'session', label: 's', amount: ECONOMY.sessionValidated, date: day(d), ref: `s${d}-${n}` });
   const ad = (d: number, n: number): Earning => ({ kind: 'ad', label: 'pub', amount: ECONOMY.adReward, date: day(d), ref: `a${d}-${n}` });
 
   it('une seule séance payée par jour, 4 par semaine', () => {
@@ -469,12 +469,12 @@ describe('économie RunCoin', () => {
     expect(g.filter((x) => x.granted > 0)).toHaveLength(ECONOMY.caps.adsPerWeek);
   });
 
-  it('un utilisateur qui fait tout au maximum ne dépasse pas ~550 RC en 2 mois', () => {
+  it('un utilisateur qui fait tout au maximum ne dépasse pas 6 000 RC (6 €) en 2 mois ni 150 RC d’activité par jour', () => {
     const all: Earning[] = [];
     for (let i = 0; i < 59; i++) { // du 2 novembre au 30 décembre : 2 mois calendaires
       const dt = new Date(2026, 10, 2 + i, 12);
       const iso = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
-      all.push({ kind: 'session', label: 's', amount: 10, date: iso, ref: `s${i}` });
+      all.push({ kind: 'session', label: 's', amount: ECONOMY.sessionValidated, date: iso, ref: `s${i}` });
       for (let n = 0; n < 10; n++) all.push({ kind: 'ad', label: 'a', amount: ECONOMY.adReward, date: iso, ref: `a${i}-${n}` });
       if (dt.getDay() === 0) {
         all.push({ kind: 'week', label: 'w', amount: ECONOMY.weekComplete, date: iso, ref: `w${i}` });
@@ -482,32 +482,36 @@ describe('économie RunCoin', () => {
         all.push({ kind: 'sponsored', label: 'p2', amount: ECONOMY.sponsoredChallenge, date: iso, ref: `p${i}b` });
       }
     }
-    const total = applyCaps(all).reduce((a, g) => a + g.granted, 0);
+    const g = applyCaps(all);
+    const total = g.reduce((a, x) => a + x.granted, 0);
     expect(total).toBeLessThanOrEqual(2 * ECONOMY.caps.monthlyTotal);
+    const perDay = new Map<string, number>();
+    for (const x of g) if (x.kind === 'session' || x.kind === 'ad') perDay.set(x.date, (perDay.get(x.date) ?? 0) + x.granted);
+    expect(Math.max(...perDay.values())).toBeLessThanOrEqual(ECONOMY.caps.activityPerDay);
   });
 
-  it('un utilisateur assidu (3 séances/sem) gagne environ 500 RC en 2 mois', () => {
+  it('un utilisateur assidu (3 séances/sem) gagne environ 5 € (≈ 4 800 RC) en 2 mois', () => {
     const all: Earning[] = [];
     for (let w = 0; w < 8; w++) {
       for (const d of [1, 3, 6]) {
         const dt = new Date(2026, 10, 2 + w * 7 + d, 12);
         const iso = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
-        all.push({ kind: 'session', label: 's', amount: 10, date: iso, ref: `s${w}${d}` });
+        all.push({ kind: 'session', label: 's', amount: ECONOMY.sessionValidated, date: iso, ref: `s${w}${d}` });
         if (d === 6) {
-          all.push({ kind: 'week', label: 'w', amount: 15, date: iso, ref: `w${w}` });
+          all.push({ kind: 'week', label: 'w', amount: ECONOMY.weekComplete, date: iso, ref: `w${w}` });
           all.push({ kind: 'ad', label: 'a', amount: ECONOMY.adReward, date: iso, ref: `a${w}` });
-          if (w % 2 === 0) all.push({ kind: 'sponsored', label: 'p', amount: 20, date: iso, ref: `p${w}` });
+          if (w % 2 === 0) all.push({ kind: 'sponsored', label: 'p', amount: ECONOMY.sponsoredChallenge, date: iso, ref: `p${w}` });
         }
       }
     }
     const total = applyCaps(all).reduce((a, g) => a + g.granted, 0);
-    expect(total).toBeGreaterThanOrEqual(400);
-    expect(total).toBeLessThanOrEqual(550);
+    expect(total).toBeGreaterThanOrEqual(4000);
+    expect(total).toBeLessThanOrEqual(5500);
   });
 
   it('indique ce qu’il reste à gagner et le challenge sponsorisé de la semaine', () => {
     const g = applyCaps([session(2), ad(2, 0)]);
-    expect(weeklyRoom(g, day(2))).toMatchObject({ earned: 10 + ECONOMY.adReward, adsLeftToday: ECONOMY.caps.adsPerDay - 1 });
+    expect(weeklyRoom(g, day(2))).toMatchObject({ earned: ECONOMY.sessionValidated + ECONOMY.adReward, adsLeftToday: ECONOMY.caps.adsPerDay - 1 });
     const c = sponsoredChallengeOf('2026-11-02');
     expect(sponsoredChallengeOf('2026-11-02').id).toBe(c.id);
     expect(sponsoredProgress(c, [{ startTime: new Date(2026, 10, 3).getTime(), distanceM: 12500 }], '2026-11-02')).toBeGreaterThan(0);

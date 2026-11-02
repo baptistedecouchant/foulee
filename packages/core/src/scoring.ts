@@ -21,11 +21,7 @@ export interface SessionValidation {
   feedback: string;
 }
 
-/** Points de séance : voir `ECONOMY` (RunCoins). Conservé pour compatibilité. */
-export const POINTS = {
-  /** Valeur indicative affichée : 100 RC = 1 €. */
-  eurosPer100: 1,
-} as const;
+/** Gains de séance : voir `ECONOMY` (RunCoins, 1 000 RC = 1 €). */
 
 /** Fenêtre de validation : de 2 jours avant à 2 jours après la date prévue (on peut décaler une séance). */
 export function isInWindow(session: PlannedSession, activityStart: number): boolean {

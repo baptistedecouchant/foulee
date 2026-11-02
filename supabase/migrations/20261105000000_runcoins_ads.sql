@@ -1,4 +1,4 @@
--- Économie RunCoin (100 RC = 1 €) : pubs récompensées vérifiées et challenges sponsorisés.
+-- Économie RunCoin (1 000 RC = 1 €) : pubs récompensées vérifiées et challenges sponsorisés.
 
 -- Pubs regardées, enregistrées UNIQUEMENT par la fonction ad-reward après vérification de Google.
 create table public.ad_views (
@@ -26,7 +26,7 @@ create table public.sponsored_challenges (
   description text not null,
   metric text not null check (metric in ('distance', 'sessions', 'longest')),
   target numeric not null,
-  reward_rc integer not null default 20,
+  reward_rc integer not null default 200,
   budget_eur numeric(10,2), -- montant payé par la marque
   created_at timestamptz not null default now()
 );
@@ -43,6 +43,6 @@ create or replace view public.runcoin_liability as
     coalesce(sum(points) filter (where points > 0), 0) as rc_distributed,
     coalesce(-sum(points) filter (where points < 0), 0) as rc_redeemed,
     coalesce(sum(points), 0) as rc_outstanding,
-    round(coalesce(sum(points), 0) / 100.0, 2) as eur_outstanding
+    round(coalesce(sum(points), 0) / 1000.0, 2) as eur_outstanding
   from public.points_ledger;
 revoke all on public.runcoin_liability from anon, authenticated;

@@ -162,27 +162,38 @@ Fichiers : `packages/core/src/scoring.ts` (validation), `packages/core/src/econo
 | Score final | 50 % volume + 50 % allures | |
 | Statuts | ≥ 0,85 validée · ≥ 0,5 partielle · sinon non validée ; refusée si l'anti-triche rejette ; en vérification si le score de confiance est < 60 | |
 
-**Monnaie : RunCoin (RC), 100 RC = 1 €** (`ECONOMY` dans `economy.ts`)
+**Monnaie : RunCoin (RC), 1 000 RC = 1 €** (`ECONOMY` dans `economy.ts`)
 
-| Gain | RC | Remarque |
+Repère marché : WeWard plafonne la marche à ~25 Wards par jour, soit environ 0,15 € par jour au maximum ; en pratique, ses utilisateurs gagnent quelques euros par mois. Foulée reste sous ce budget.
+
+| Gain | RC | € |
 |---|---|---|
-| Séance validée | **10** | |
-| Séance validée en partie | **5** | |
-| Semaine complète | **15** | |
-| Challenge sponsorisé réussi | **20** | Financé par la marque partenaire |
-| Pub vidéo regardée (30 s) | **1** | Mettre 2 seulement si le CPM réel dépasse 20 € (voir plus bas) |
-| Défis entre amis, badges, plan terminé, objectif atteint | 0 RC | Uniquement de l'XP, pour éviter les arrangements entre amis |
+| Séance validée | **100** | 0,10 |
+| Séance validée en partie | **50** | 0,05 |
+| Semaine complète | **150** | 0,15 |
+| Challenge sponsorisé réussi | **200** | 0,20 (financé par la marque) |
+| Pub vidéo regardée (30 s) | **10** | 0,01 |
+| Défis entre amis, badges, plan terminé, objectif atteint | 0 RC | uniquement de l'XP |
 
 | Plafond | Valeur |
 |---|---|
 | Séances payées | 1 par jour, 4 par semaine |
 | Pubs | 3 par jour, 10 par semaine |
+| Activité du jour (séances + pubs) | **150 RC** (0,15 €, le maximum quotidien de WeWard) |
 | Challenge sponsorisé | 1 par semaine |
-| Total | **75 RC/semaine**, **275 RC/mois** |
+| Total | **750 RC/semaine**, **3 000 RC/mois** (3 €) |
 
-Tous les plafonds sont appliqués dans l'ordre chronologique (`applyCaps`), à l'identique dans l'app et sur le serveur. Les tests vérifient deux choses : un utilisateur assidu (3 séances par semaine) gagne entre 400 et 550 RC en 2 mois, et un utilisateur « au maximum » ne dépasse pas 550 RC sur 2 mois calendaires.
+Gains simulés sur 2 mois (8 semaines), vérifiés par les tests :
 
-**Rentabilité de la pub** : avec un CPM de 12 €, une vue rapporte 0,012 €. Verser 2 RC (0,02 €) ferait perdre 0,008 € par vue ; à 1 RC (0,01 €), on gagne 0,002 € par vue.
+| Profil | RC | € |
+|---|---|---|
+| Occasionnel (2 séances/semaine) | 2 800 | 2,80 |
+| Assidu (3 séances/semaine, quelques pubs, 1 challenge sur 2) | ~4 500 | ~4,50 |
+| Au maximum (tout, tous les jours) | ≤ 6 000 | ≤ 6,00 |
+
+Tous les plafonds sont appliqués dans l'ordre chronologique (`applyCaps`), à l'identique dans l'app et sur le serveur.
+
+**Rentabilité de la pub** : avec un CPM de 12 €, une vue rapporte 0,012 €. Verser 10 RC (0,01 €) laisse 0,002 € de marge par vue. Ne dépasse pas 12 RC sans avoir mesuré un CPM réel plus élevé.
 
 **Suivi de la dette** : la vue SQL `runcoin_liability` donne les RC distribués, échangés et en circulation, avec leur équivalent en euros.
 
@@ -332,10 +343,10 @@ Fichiers : `app/(tabs)/rewards.tsx` (catalogue démo), tables `partners`, `rewar
 
 | Article (démo) | Coût | Équivalent |
 |---|---|---|
-| -10 % sur ta prochaine commande | 250 RC | ~1 mois de pratique régulière |
-| -15 % sur un dossard | 400 RC | |
-| Bon d'achat 5 € | 500 RC | ~2 mois |
-| Bon d'achat 10 € | 1 000 RC | |
+| -10 % sur ta prochaine commande | 2 000 RC | ~1 mois de pratique régulière |
+| -15 % sur un dossard | 4 000 RC | |
+| Bon d'achat 5 € | 5 000 RC | ~2 mois |
+| Bon d'achat 10 € | 10 000 RC | |
 
 En production, chaque article est un **code ou un lien affilié tracké** du partenaire (commission sur l'achat). Un échange vérifie le solde et le stock, et empêche deux échanges simultanés. Le solde ne peut jamais devenir négatif.
 

@@ -15,10 +15,10 @@ import { useStore } from '@/lib/store';
 // Catalogue de démonstration (partenaires fictifs). En production : table `rewards`,
 // chaque article étant un code ou un lien affilié tracké du partenaire.
 const CATALOG: Array<{ id: string; title: string; partner: string; cost: number; image: ImageKey }> = [
-  { id: 'remise-10', title: '-10 % sur ta prochaine commande', partner: 'Boutique running partenaire', cost: 250, image: 'shoes' },
-  { id: 'dossard', title: '-15 % sur un dossard', partner: 'Organisateur de course', cost: 400, image: 'cityRace' },
-  { id: 'bon-5', title: "Bon d'achat 5 €", partner: 'Enseigne de sport partenaire', cost: 500, image: 'road' },
-  { id: 'bon-10', title: "Bon d'achat 10 €", partner: 'Enseigne de sport partenaire', cost: 1000, image: 'trail' },
+  { id: 'remise-10', title: '-10 % sur ta prochaine commande', partner: 'Boutique running partenaire', cost: 2000, image: 'shoes' },
+  { id: 'dossard', title: '-15 % sur un dossard', partner: 'Organisateur de course', cost: 4000, image: 'cityRace' },
+  { id: 'bon-5', title: "Bon d'achat 5 €", partner: 'Enseigne de sport partenaire', cost: 5000, image: 'road' },
+  { id: 'bon-10', title: "Bon d'achat 10 €", partner: 'Enseigne de sport partenaire', cost: 10000, image: 'trail' },
 ];
 
 const TIER: Record<BadgeTier, readonly [string, string]> = {
@@ -77,7 +77,7 @@ export default function RewardsScreen() {
           {fmtInt(balance)} RC
         </Txt>
         <Txt color={t.goldText}>
-          = {euros(balance)} · cette semaine : {room.earned}/{ECONOMY.caps.weeklyTotal} RC
+          = {euros(balance)} · cette semaine : {fmtInt(room.earned)}/{fmtInt(ECONOMY.caps.weeklyTotal)} RC
         </Txt>
         {next && (
           <View style={{ gap: 6 }}>
@@ -153,7 +153,7 @@ export default function RewardsScreen() {
             </Card>
           )}
           <Txt variant="caption" muted style={{ textAlign: 'center' }}>
-            Partenaires fictifs pour la démo. 100 RC = 1 €. Photos : Unsplash.
+            Partenaires fictifs pour la démo. 1 000 RC = 1 €. Photos : Unsplash.
           </Txt>
         </>
       )}
@@ -211,7 +211,8 @@ export default function RewardsScreen() {
               ['Séances payées', `${ECONOMY.caps.sessionsPerDay}/jour · ${ECONOMY.caps.sessionsPerWeek}/semaine`],
               ['Pubs', `${ECONOMY.caps.adsPerDay}/jour · ${ECONOMY.caps.adsPerWeek}/semaine`],
               ['Challenge sponsorisé', `${ECONOMY.caps.sponsoredPerWeek}/semaine`],
-              ['Total', `${ECONOMY.caps.weeklyTotal} RC/semaine · ${ECONOMY.caps.monthlyTotal} RC/mois`],
+              ['Activité du jour (séances + pubs)', `${ECONOMY.caps.activityPerDay} RC/jour`],
+              ['Total', `${fmtInt(ECONOMY.caps.weeklyTotal)} RC/semaine · ${fmtInt(ECONOMY.caps.monthlyTotal)} RC/mois`],
             ].map(([k, v]) => (
               <Row key={k} style={{ justifyContent: 'space-between' }}>
                 <Txt style={{ flex: 1 }}>{k}</Txt>
