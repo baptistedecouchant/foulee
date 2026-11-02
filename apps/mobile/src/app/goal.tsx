@@ -1,3 +1,4 @@
+import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
@@ -10,7 +11,7 @@ import {
   formatPace,
   formatTime,
   objectiveLevel,
-  parseTime,
+  parseGoalTime,
   suggestedStartDate,
   type Athlete,
   type CurrentLevel,
@@ -19,11 +20,10 @@ import {
   type ObjectiveLevel,
   type PlanRequest,
   type SessionsPerWeek,
-  type TimeSuggestion,
 } from '@foulee/core';
 
-import { Button, Chip, Ionicons, ProgressBar, Row, Txt } from '@/components/ui';
-import { Glass, PhotoCard } from '@/components/visuals';
+import { Button, Ionicons, ProgressBar, Txt, type IconName } from '@/components/ui';
+import { PhotoCard } from '@/components/visuals';
 import { Gradients, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAthlete } from '@/lib/athlete';
@@ -37,7 +37,7 @@ const DISTANCES = [
   { km: 42.195, label: 'Marathon' },
 ];
 
-const LEVELS: Array<{ id: Extract<CurrentLevel, { kind: 'estimate' }>['level']; label: string; hint: string; icon: 'walk' | 'footsteps' | 'speedometer' | 'flash' }> = [
+const LEVELS: Array<{ id: Extract<CurrentLevel, { kind: 'estimate' }>['level']; label: string; hint: string; icon: IconName }> = [
   { id: 'debutant', label: 'Je débute', hint: '20 à 30 min sans m’arrêter', icon: 'walk' },
   { id: 'occasionnel', label: 'Un peu', hint: '1 à 2 sorties par semaine', icon: 'footsteps' },
   { id: 'regulier', label: 'Régulier', hint: '3 sorties ou plus', icon: 'speedometer' },
@@ -53,8 +53,7 @@ const LEVEL_STYLE: Record<ObjectiveLevel, { colors: readonly [string, string]; b
   expert: { colors: Gradients.flame, bars: 3 },
 };
 
-type TimeChoice = TimeSuggestion['label'] | 'perso';
-
+const MAX_WEEKS = 30;
 const stepFor = (sec: number) => (sec < 1800 ? 15 : sec < 5400 ? 30 : 60);
 const roundTo = (s: number, step: number) => Math.round(s / step) * step;
 const num = (s: string) => {
@@ -79,29 +78,34 @@ export default function GoalScreen() {
   const [level, setLevel] = useState<(typeof LEVELS)[number]['id']>('occasionnel');
   const [sessions, setSessions] = useState<SessionsPerWeek>(3);
   const [days, setDays] = useState<number[]>(DAY_SETS[3]);
-  const [choice, setChoice] = useState<TimeChoice>('Réaliste');
-  const [customSec, setCustomSec] = useState<number | null>(null);
+  const [targetText, setTargetText] = useState('');
+  const [targetTouched, setTargetTouched] = useState(false);
   const [weight, setWeight] = useState(saved.weightKg ? String(saved.weightKg) : '');
   const [height, setHeight] = useState(saved.heightCm ? String(saved.heightCm) : '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Le profil peut arriver après l'ouverture de l'écran.
   useEffect(() => {
-    if (!weight && saved.weightKg) setWeight(String(saved.weightKg));
-    if (!height && saved.heightCm) setHeight(String(saved.heightCm));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (saved.weightKg) setWeight((w) => w || String(saved.weightKg));
+    if (saved.heightCm) setHeight((h) => h || String(saved.heightCm));
   }, [saved.weightKg, saved.heightCm]);
 
   const eventDate = addDays(start, (weeks - 1) * 7 + raceDow);
   const km = distance === 'autre' ? (num(otherKm) ?? 0) : distance;
-  const refSec = parseTime(refTime);
+  const refSec = parseGoalTime(refTime, refKm);
   const weightKg = num(weight);
   const heightCm = num(height);
-  const athlete: Athlete = { age: saved.age, weightKg: weightError(weightKg) ? undefined : (weightKg ?? undefined), heightCm: heightError(heightCm) ? undefined : (heightCm ?? undefined) };
+  const athlete: Athlete = {
+    age: saved.age,
+    weightKg: weightKg != null && !weightError(weightKg) ? weightKg : undefined,
+    heightCm: heightCm != null && !heightError(heightCm) ? heightCm : undefined,
+  };
 
-  const problem = useMemo(() => {
+  // Erreurs qui empêchent toute estimation.
+  const baseProblem = useMemo(() => {
     if (!(km >= 1 && km <= 100)) return 'Indique une distance entre 1 et 100 km.';
-    if (hasRef && !refSec) return 'Indique ton chrono récent au format 52:30.';
+    if (hasRef && !refSec) return 'Indique ton chrono récent, par exemple 52:30.';
     if (hasRef && refSec && (refSec / refKm < 150 || refSec / refKm > 720)) return 'Ce chrono récent semble impossible : vérifie-le.';
     if (eventDate <= todayIso()) return 'Le jour J doit être dans le futur.';
     return weightError(weightKg) ?? heightError(heightCm);
@@ -110,25 +114,35 @@ export default function GoalScreen() {
   const currentLevel: CurrentLevel = hasRef && refSec ? { kind: 'race', distanceKm: refKm, timeSec: refSec } : { kind: 'estimate', level };
   const opts = { sessionsPerWeek: sessions, athlete };
 
-  // 1) Ce qui est atteignable (sert à proposer des chronos cohérents).
-  const base = problem ? null : assessGoal({ mode: 'distance', sport: 'running', distanceKm: km, eventDate }, currentLevel, start, opts);
-  const suggestions = base?.suggestions ?? [];
-  const bounds = base
-    ? { min: roundTo(base.achievable.bestSec * 0.95, stepFor(base.predictedNowSec)), max: roundTo(base.predictedNowSec * 1.25, stepFor(base.predictedNowSec)) }
-    : null;
-  const targetSec =
-    mode !== 'chrono' || !base
-      ? undefined
-      : choice === 'perso'
-        ? Math.min(bounds!.max, Math.max(bounds!.min, customSec ?? base.achievable.likelySec))
-        : suggestions.find((s) => s.label === choice)?.timeSec;
+  // 1) Ce qui est atteignable : sert à proposer des chronos et à borner la saisie.
+  const base = baseProblem ? null : assessGoal({ mode: 'distance', sport: 'running', distanceKm: km, eventDate }, currentLevel, start, opts);
+  const step = base ? stepFor(base.predictedNowSec) : 30;
+  const bounds = base ? { min: roundTo(base.achievable.bestSec * 0.95, step), max: roundTo(base.predictedNowSec * 1.3, step) } : null;
+
+  // Tant que l'utilisateur n'a rien saisi, on pré-remplit avec le chrono réaliste.
+  const likely = base?.achievable.likelySec;
+  useEffect(() => {
+    if (!targetTouched && likely) setTargetText(formatTime(likely));
+  }, [likely, targetTouched]);
+
+  const targetSec = mode === 'chrono' ? parseGoalTime(targetText, km) : null;
+  const targetProblem = useMemo(() => {
+    if (mode !== 'chrono' || !bounds) return null;
+    if (!targetText.trim()) return 'Indique le temps que tu vises.';
+    if (!targetSec) return 'Format attendu : 45:00, 1:45:00 ou 1h45.';
+    if (targetSec < bounds.min) return `Trop rapide pour ton niveau actuel en ${weeks} semaine${weeks > 1 ? 's' : ''}. Le plus rapide envisageable : ${formatTime(bounds.min)}.`;
+    if (targetSec > bounds.max) return `C’est bien plus lent que ton niveau actuel (${formatTime(base!.predictedNowSec)}). Vise ${formatTime(bounds.max)} ou plus vite.`;
+    return null;
+  }, [mode, bounds, targetText, targetSec, weeks, base]);
+  const fixTarget = targetSec && bounds ? (targetSec < bounds.min ? bounds.min : targetSec > bounds.max ? bounds.max : null) : null;
 
   // 2) L'objectif choisi.
+  const problem = baseProblem ?? targetProblem;
   const request: PlanRequest | null =
     problem || !base
       ? null
       : {
-          goal: { mode, sport: 'running', distanceKm: km, targetTimeSec: targetSec, eventDate },
+          goal: { mode, sport: 'running', distanceKm: km, targetTimeSec: mode === 'chrono' ? targetSec! : undefined, eventDate },
           level: currentLevel,
           sessionsPerWeek: sessions,
           startDate: start,
@@ -136,36 +150,45 @@ export default function GoalScreen() {
           athlete,
         };
   const assessment = request ? assessGoal(request.goal, request.level, start, opts) : null;
-  const objLevel = objectiveLevel({ mode, distanceKm: km || 10, targetTimeSec: targetSec });
-
-  // Leviers : ce que changerait une séance de plus, ou quelques semaines de plus.
-  const levers = useMemo(() => {
-    if (!request || !assessment) return [];
-    const out: Array<{ label: string; confidence: number; apply: () => void }> = [];
-    if (sessions < 5) {
-      const n = (sessions + 1) as SessionsPerWeek;
-      const c = assessGoal(request.goal, request.level, start, { sessionsPerWeek: n, athlete }).confidence;
-      if (c > assessment.confidence + 2) out.push({ label: `${n} séances / sem.`, confidence: c, apply: () => pickSessions(n) });
-    }
-    if (weeks <= 26) {
-      const later = addDays(eventDate, 28);
-      const c = assessGoal({ ...request.goal, eventDate: later }, request.level, start, opts).confidence;
-      if (c > assessment.confidence + 2) out.push({ label: '4 semaines de plus', confidence: c, apply: () => setWeeks((w) => w + 4) });
-    }
-    return out;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(request), assessment?.confidence]);
+  const objLevel = objectiveLevel({ mode, distanceKm: km || 10, targetTimeSec: targetSec ?? undefined });
+  const suggestionConf = (sec: number) =>
+    assessGoal({ mode: 'chrono', sport: 'running', distanceKm: km, targetTimeSec: sec, eventDate }, currentLevel, start, opts).confidence;
 
   const pickSessions = (n: SessionsPerWeek) => {
     setSessions(n);
     setDays(DAY_SETS[n]);
   };
-  const toggleDay = (d: number) =>
-    setDays((cur) => (cur.includes(d) ? cur.filter((x) => x !== d) : [...cur, d].slice(-sessions)));
+  const toggleDay = (d: number) => setDays((cur) => (cur.includes(d) ? cur.filter((x) => x !== d) : [...cur, d].slice(-sessions)));
+  const pickDistance = (d: number | 'autre') => {
+    setDistance(d);
+    setTargetTouched(false); // nouvelle distance : nouveau chrono proposé
+  };
+  const setTarget = (sec: number) => {
+    Haptics.selectionAsync().catch(() => {});
+    setTargetTouched(true);
+    setTargetText(formatTime(sec));
+  };
+
+  // Leviers : ce que changerait une séance de plus, ou quatre semaines de plus.
+  const levers: Array<{ label: string; confidence: number; apply: () => void }> = [];
+  if (request && assessment) {
+    if (sessions < 5) {
+      const n = (sessions + 1) as SessionsPerWeek;
+      const c = assessGoal(request.goal, request.level, start, { sessionsPerWeek: n, athlete }).confidence;
+      if (c >= assessment.confidence + 3) levers.push({ label: `${n} séances / sem.`, confidence: c, apply: () => pickSessions(n) });
+    }
+    if (weeks + 4 <= MAX_WEEKS) {
+      const c = assessGoal({ ...request.goal, eventDate: addDays(eventDate, 28) }, request.level, start, opts).confidence;
+      if (c >= assessment.confidence + 3) levers.push({ label: '4 semaines de plus', confidence: c, apply: () => setWeeks((w) => Math.min(MAX_WEEKS, w + 4)) });
+    }
+  }
+
+  const daysOk = days.length === sessions;
+  const full = plans.length >= MAX_ACTIVE_PLANS;
 
   const submit = async () => {
-    if (!request) return;
-    if (days.length !== sessions) {
+    if (!request || saving) return;
+    if (!daysOk) {
       setError(`Choisis ${sessions} jour${sessions > 1 ? 's' : ''} d’entraînement.`);
       return;
     }
@@ -176,304 +199,354 @@ export default function GoalScreen() {
         await saveAthlete({ weightKg, heightCm }).catch(() => {});
       }
       const id = await createPlan(request);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       router.dismiss();
       router.push({ pathname: '/plan/[id]', params: { id } });
-    } catch {
-      setError('Le plan n’a pas pu être créé. Vérifie ta connexion et réessaie.');
+    } catch (e) {
+      const code = String((e as { message?: string })?.message ?? '');
+      setError(
+        code.includes('too_many_active_plans')
+          ? `Tu as déjà ${MAX_ACTIVE_PLANS} objectifs en cours.`
+          : 'Le plan n’a pas pu être créé. Vérifie ta connexion et réessaie.',
+      );
     } finally {
       setSaving(false);
     }
   };
 
   const tone = feasibilityTone(assessment?.feasibility, t);
-  const input = [styles.input, { borderColor: t.line, color: t.text, backgroundColor: t.surfaceAlt }];
   const ls = LEVEL_STYLE[objLevel];
-  const full = plans.length >= MAX_ACTIVE_PLANS;
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: t.background }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
-        {/* ---------- Héros : l'objectif tel qu'il se dessine ---------- */}
-        <PhotoCard image={km >= 40 ? 'cityRace' : km >= 20 ? 'marathon' : mode === 'chrono' ? 'trackSunset' : 'road'} height={310} contentStyle={{ flex: 1, justifyContent: 'flex-end' }}>
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: t.background }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={60}>
+      <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+        {/* ---------- Héros ---------- */}
+        <PhotoCard image={km >= 40 ? 'cityRace' : km >= 20 ? 'marathon' : mode === 'chrono' ? 'trackSunset' : 'road'} height={292} contentStyle={styles.heroContent}>
           <View style={styles.heroTop}>
-            <Chip tone="glass" icon="flag" label={`Objectif ${Math.min(plans.length + 1, MAX_ACTIVE_PLANS)}/${MAX_ACTIVE_PLANS}`} />
+            <View style={styles.glassChip}>
+              <Txt style={styles.glassChipText} color="#fff">
+                Objectif {Math.min(plans.length + 1, MAX_ACTIVE_PLANS)}/{MAX_ACTIVE_PLANS}
+              </Txt>
+            </View>
             <LinearGradient colors={ls.colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.levelPill}>
               <View style={styles.bars}>
                 {[1, 2, 3].map((b) => (
-                  <View key={b} style={[styles.bar, { height: 5 + b * 3, opacity: b <= ls.bars ? 1 : 0.35 }]} />
+                  <View key={b} style={[styles.bar, { height: 4 + b * 3, opacity: b <= ls.bars ? 1 : 0.35 }]} />
                 ))}
               </View>
-              <Txt style={styles.levelText} color="#fff">
+              <Txt style={styles.glassChipText} color="#fff">
                 Niveau {objLevel}
               </Txt>
             </LinearGradient>
           </View>
 
-          <Txt variant="label" color="rgba(255,255,255,0.75)">
-            {mode === 'chrono' ? 'Objectif chrono' : 'Objectif distance'}
-          </Txt>
-          <Txt variant="hero" color="#fff" style={styles.heroTitle} numberOfLines={1}>
-            {km > 0 ? distanceLabel(km) : '…'}
-          </Txt>
-          <Txt variant="display" color="#fff" style={{ marginTop: -6 }}>
-            {mode === 'chrono' ? (targetSec ? `en ${formatTime(targetSec)}` : 'en …') : 'jusqu’à la ligne'}
-          </Txt>
+          <View style={{ gap: 2 }}>
+            <Txt style={styles.heroKicker} color="rgba(255,255,255,0.72)">
+              {mode === 'chrono' ? 'Objectif chrono' : 'Objectif distance'}
+            </Txt>
+            <Txt style={styles.heroTitle} color="#fff" numberOfLines={1}>
+              {km > 0 ? distanceLabel(km) : '…'}
+            </Txt>
+            <Txt style={styles.heroSub} color="rgba(255,255,255,0.92)" numberOfLines={1}>
+              {mode === 'chrono' ? (targetSec && !targetProblem ? `en ${formatTime(targetSec)}` : 'temps à définir') : 'jusqu’à la ligne d’arrivée'}
+            </Txt>
+          </View>
 
-          <Glass style={styles.heroGlass}>
-            <HeroStat icon="calendar" value={formatDateFr(eventDate, { day: 'numeric', month: 'short' })} label={DAY_NAMES[raceDow]} />
-            <HeroStat icon="time" value={`${weeks} sem.`} label="de prépa" />
-            <HeroStat icon="repeat" value={`${sessions}×/sem`} label="séances" />
-            {targetSec && km ? <HeroStat icon="speedometer" value={formatPace(targetSec / km)} label="min/km" /> : null}
-          </Glass>
+          <View style={styles.heroStats}>
+            <HeroStat value={formatDateFr(eventDate, { day: 'numeric', month: 'short' })} label={DAY_NAMES[raceDow]} />
+            <View style={styles.heroDivider} />
+            <HeroStat value={`${weeks} sem.`} label="de prépa" />
+            <View style={styles.heroDivider} />
+            <HeroStat value={`${sessions}×`} label="par semaine" />
+            {mode === 'chrono' && targetSec && !targetProblem && km ? (
+              <>
+                <View style={styles.heroDivider} />
+                <HeroStat value={formatPace(targetSec / km)} label="min/km" />
+              </>
+            ) : null}
+          </View>
         </PhotoCard>
 
-        {/* ---------- 1. Distance ---------- */}
-        <Section n={1} title="Ce que tu vises">
-          <View style={styles.modeRow}>
-            <ModeTile icon="stopwatch" title="Un chrono" hint="10 km en 45 min" active={mode === 'chrono'} onPress={() => setMode('chrono')} />
-            <ModeTile icon="flag" title="Une distance" hint="Finir mon premier semi" active={mode === 'distance'} onPress={() => setMode('distance')} />
-          </View>
-          <Row style={{ flexWrap: 'wrap' }}>
+        {/* ---------- Objectif ---------- */}
+        <Section title="Ton objectif">
+          <Segment
+            options={[
+              { value: 'chrono', label: 'Un chrono', icon: 'stopwatch-outline' },
+              { value: 'distance', label: 'Finir une distance', icon: 'flag-outline' },
+            ]}
+            value={mode}
+            onChange={(v) => setMode(v as GoalMode)}
+          />
+          <View style={styles.wrap}>
             {DISTANCES.map((d) => (
-              <Pill key={d.km} label={d.label} active={distance === d.km} onPress={() => setDistance(d.km)} />
+              <Pill key={d.km} label={d.label} active={distance === d.km} onPress={() => pickDistance(d.km)} />
             ))}
-            <Pill label="Autre" active={distance === 'autre'} onPress={() => setDistance('autre')} />
-          </Row>
+            <Pill label="Autre" active={distance === 'autre'} onPress={() => pickDistance('autre')} />
+          </View>
           {distance === 'autre' && (
-            <Row>
-              <TextInput accessibilityLabel="Distance en kilomètres" value={otherKm} onChangeText={setOtherKm} keyboardType="decimal-pad" style={[input, { flex: 1, minWidth: 0 }]} />
-              <Txt muted>km</Txt>
-            </Row>
+            <Field label="Distance" unit="km" value={otherKm} onChange={(v) => {
+                setOtherKm(v);
+                setTargetTouched(false);
+              }} keyboardType="decimal-pad" />
+          )}
+
+          {mode === 'chrono' && (
+            <View style={{ gap: Spacing.m }}>
+              <View style={[styles.timeBox, { backgroundColor: t.surfaceAlt, borderColor: targetProblem && targetTouched ? t.bad : 'transparent' }]}>
+                <Txt variant="caption" muted>
+                  Temps visé
+                </Txt>
+                <TextInput
+                  accessibilityLabel="Temps visé"
+                  value={targetText}
+                  onChangeText={(v) => {
+                    setTargetTouched(true);
+                    setTargetText(v);
+                  }}
+                  placeholder="45:00"
+                  placeholderTextColor={t.textSecondary}
+                  keyboardType="numbers-and-punctuation"
+                  returnKeyType="done"
+                  maxLength={8}
+                  selectTextOnFocus
+                  style={[styles.timeInput, { color: t.text }]}
+                />
+                <Txt variant="caption" muted>
+                  {targetSec && km ? `${formatPace(targetSec / km)} /km` : 'ex. 45:00 · 1:45:00 · 1h45'}
+                  {base ? ` · niveau actuel ≈ ${formatTime(base.predictedNowSec)}` : ''}
+                </Txt>
+              </View>
+
+              {targetProblem && (targetTouched || !targetText) ? (
+                <View style={[styles.notice, { backgroundColor: t.flameSoft }]}>
+                  <Ionicons name="alert-circle" size={16} color={t.bad} />
+                  <Txt variant="caption" color={t.bad} style={{ flex: 1 }}>
+                    {targetProblem}
+                  </Txt>
+                  {fixTarget ? (
+                    <Pressable accessibilityRole="button" onPress={() => setTarget(fixTarget)} hitSlop={8}>
+                      <Txt variant="caption" color={t.accent} style={{ fontWeight: '700' }}>
+                        Viser {formatTime(fixTarget)}
+                      </Txt>
+                    </Pressable>
+                  ) : null}
+                </View>
+              ) : null}
+
+              {base && (
+                <View style={{ gap: Spacing.s }}>
+                  <Txt variant="caption" muted>
+                    Suggestions pour toi
+                  </Txt>
+                  <View style={styles.suggestRow}>
+                    {base.suggestions.map((s) => {
+                      const active = targetSec === s.timeSec;
+                      const conf = suggestionConf(s.timeSec);
+                      return (
+                        <Pressable
+                          key={s.label}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: active }}
+                          accessibilityLabel={`${s.label} : ${formatTime(s.timeSec)}, ${conf} % de chances`}
+                          onPress={() => setTarget(s.timeSec)}
+                          style={({ pressed }) => [
+                            styles.suggest,
+                            { backgroundColor: active ? t.accentSoft : t.surfaceAlt, borderColor: active ? t.accent : 'transparent', opacity: pressed ? 0.8 : 1 },
+                          ]}>
+                          <Txt variant="caption" color={active ? t.accent : t.textSecondary} style={{ fontWeight: '600' }}>
+                            {s.label}
+                          </Txt>
+                          <Txt style={styles.suggestTime}>{formatTime(s.timeSec)}</Txt>
+                          <View style={styles.confRow}>
+                            <View style={[styles.confDot, { backgroundColor: confColor(conf, t) }]} />
+                            <Txt variant="caption" muted>
+                              {conf} %
+                            </Txt>
+                          </View>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
+            </View>
           )}
         </Section>
 
-        {/* ---------- 2. Niveau actuel + profil ---------- */}
-        <Section n={2} title="Où tu en es">
-          <View style={styles.modeRow}>
-            <ModeTile icon="trophy" title="Chrono récent" hint="Le plus précis" active={hasRef} onPress={() => setHasRef(true)} />
-            <ModeTile icon="help-circle" title="Pas de chrono" hint="J’estime mon niveau" active={!hasRef} onPress={() => setHasRef(false)} />
-          </View>
+        {/* ---------- Niveau actuel ---------- */}
+        <Section title="Où tu en es">
+          <Segment
+            options={[
+              { value: 'ref', label: 'Chrono récent', icon: 'trophy-outline' },
+              { value: 'estimate', label: 'Pas de chrono', icon: 'help-circle-outline' },
+            ]}
+            value={hasRef ? 'ref' : 'estimate'}
+            onChange={(v) => setHasRef(v === 'ref')}
+          />
           {hasRef ? (
             <>
-              <Row style={{ flexWrap: 'wrap' }}>
+              <View style={styles.wrap}>
                 {[5, 10, 21.0975].map((d) => (
                   <Pill key={d} label={d === 21.0975 ? 'Semi' : `${d} km`} active={refKm === d} onPress={() => setRefKm(d)} />
                 ))}
-              </Row>
-              <Row>
-                <TextInput
-                  accessibilityLabel="Chrono récent"
-                  value={refTime}
-                  onChangeText={setRefTime}
-                  placeholder="52:30"
-                  placeholderTextColor={t.textSecondary}
-                  keyboardType="numbers-and-punctuation"
-                  style={[input, styles.big, { flex: 1, minWidth: 0 }]}
-                />
-                {refSec ? (
-                  <Txt muted style={{ flexShrink: 0 }}>
-                    {formatPace(refSec / refKm)} /km
-                  </Txt>
-                ) : null}
-              </Row>
+              </View>
+              <Field
+                label="Ton chrono"
+                unit={refSec ? `${formatPace(refSec / refKm)} /km` : ''}
+                value={refTime}
+                onChange={setRefTime}
+                keyboardType="numbers-and-punctuation"
+                placeholder="52:30"
+              />
               <Txt variant="caption" muted>
-                Une course ou un test de moins de 3 mois.
+                Une course ou un test de moins de 3 mois : c’est ce qui sert à calculer tes allures.
               </Txt>
             </>
           ) : (
             <View style={styles.grid}>
-              {LEVELS.map((l) => (
-                <Pressable
-                  key={l.id}
-                  accessibilityRole="radio"
-                  accessibilityState={{ selected: level === l.id }}
-                  onPress={() => setLevel(l.id)}
-                  style={[styles.tile, { borderColor: level === l.id ? t.accent : t.line, backgroundColor: level === l.id ? t.accentSoft : t.surface }]}>
-                  <Ionicons name={l.icon} size={20} color={level === l.id ? t.accent : t.textSecondary} />
-                  <Txt style={{ fontWeight: '700' }}>{l.label}</Txt>
-                  <Txt variant="caption" muted numberOfLines={2}>
-                    {l.hint}
-                  </Txt>
-                </Pressable>
-              ))}
+              {LEVELS.map((l) => {
+                const active = level === l.id;
+                return (
+                  <Pressable
+                    key={l.id}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: active }}
+                    onPress={() => setLevel(l.id)}
+                    style={[styles.tile, { backgroundColor: active ? t.accentSoft : t.surfaceAlt, borderColor: active ? t.accent : 'transparent' }]}>
+                    <Ionicons name={l.icon} size={18} color={active ? t.accent : t.textSecondary} />
+                    <Txt style={{ fontWeight: '600' }} color={active ? t.accent : t.text}>
+                      {l.label}
+                    </Txt>
+                    <Txt variant="caption" muted numberOfLines={2}>
+                      {l.hint}
+                    </Txt>
+                  </Pressable>
+                );
+              })}
             </View>
           )}
 
-          <View style={[styles.subCard, { backgroundColor: t.surfaceAlt }]}>
-            <Row style={{ justifyContent: 'space-between' }}>
-              <Txt style={{ fontWeight: '700' }}>Profil sportif</Txt>
-              {saved.age ? <Chip tone="accent" icon="person" label={`${saved.age} ans`} /> : null}
-            </Row>
-            <Row>
-              <Metric label="Poids" unit="kg" value={weight} onChange={setWeight} />
-              <Metric label="Taille" unit="cm" value={height} onChange={setHeight} />
-            </Row>
+          <View style={[styles.divider, { backgroundColor: t.line }]} />
+          <View style={styles.rowBetween}>
+            <Txt style={{ fontWeight: '600' }}>Profil sportif</Txt>
             <Txt variant="caption" muted>
-              Facultatif. Âge et corpulence ajustent la charge et l’estimation de progression.
+              {saved.age ? `${saved.age} ans · facultatif` : 'facultatif'}
             </Txt>
           </View>
+          <View style={styles.row}>
+            <Field label="Poids" unit="kg" value={weight} onChange={setWeight} keyboardType="decimal-pad" placeholder="—" flex />
+            <Field label="Taille" unit="cm" value={height} onChange={setHeight} keyboardType="number-pad" placeholder="—" flex />
+          </View>
+          <Txt variant="caption" muted>
+            L’âge et la corpulence ajustent la charge et l’estimation de progression.
+          </Txt>
         </Section>
 
-        {/* ---------- 3. Jour J ---------- */}
-        <Section n={3} title="Le jour J" right={<Chip tone="accent" icon="calendar" label={formatDateFr(eventDate, { weekday: 'short', day: 'numeric', month: 'short' })} />}>
-          <Row style={{ justifyContent: 'space-between' }}>
-            <RoundBtn icon="remove" label="Une semaine plus tôt" onPress={() => setWeeks((w) => Math.max(1, w - 1))} />
+        {/* ---------- Calendrier ---------- */}
+        <Section title="Le jour J" right={formatDateFr(eventDate, { weekday: 'long', day: 'numeric', month: 'long' })}>
+          <View style={[styles.stepper, { backgroundColor: t.surfaceAlt }]}>
+            <RoundBtn icon="remove" label="Une semaine plus tôt" disabled={weeks <= 1} onPress={() => setWeeks((w) => Math.max(1, w - 1))} />
             <View style={{ alignItems: 'center', flex: 1 }}>
-              <Txt variant="hero" style={{ fontSize: 40, lineHeight: 44 }}>
-                {weeks}
+              <Txt style={styles.stepValue}>{weeks}</Txt>
+              <Txt variant="caption" muted>
+                semaine{weeks > 1 ? 's' : ''} de préparation
               </Txt>
-              <Txt muted>semaine{weeks > 1 ? 's' : ''} de préparation</Txt>
             </View>
-            <RoundBtn icon="add" label="Une semaine plus tard" onPress={() => setWeeks((w) => Math.min(30, w + 1))} />
-          </Row>
+            <RoundBtn icon="add" label="Une semaine plus tard" disabled={weeks >= MAX_WEEKS} onPress={() => setWeeks((w) => Math.min(MAX_WEEKS, w + 1))} />
+          </View>
           <Txt variant="caption" muted>
             Jour de la course
           </Txt>
           <DayPicker selected={[raceDow]} onToggle={setRaceDow} />
         </Section>
 
-        {/* ---------- 4. Rythme ---------- */}
-        <Section n={4} title="Ton rythme" right={<Txt muted>{sessions} séance{sessions > 1 ? 's' : ''} / sem.</Txt>}>
-          <View style={styles.sessionsRow}>
-            {([1, 2, 3, 4, 5] as SessionsPerWeek[]).map((n) => {
-              const active = n === sessions;
-              return (
-                <Pressable
-                  key={n}
-                  accessibilityRole="radio"
-                  accessibilityLabel={`${n} séance${n > 1 ? 's' : ''} par semaine`}
-                  accessibilityState={{ selected: active }}
-                  onPress={() => pickSessions(n)}
-                  style={[styles.sessionBtn, { borderColor: active ? t.accent : t.line, backgroundColor: active ? t.accent : t.surface }]}>
-                  <Txt variant="title" color={active ? t.accentText : t.text}>
-                    {n}
-                  </Txt>
-                  <View style={styles.dots}>
-                    {Array.from({ length: n }, (_, i) => (
-                      <View key={i} style={[styles.dot, { backgroundColor: active ? t.accentText : t.accent }]} />
-                    ))}
-                  </View>
-                </Pressable>
-              );
-            })}
-          </View>
-          <Row style={{ justifyContent: 'space-between' }}>
+        {/* ---------- Rythme ---------- */}
+        <Section title="Ton rythme" right={`${sessions} séance${sessions > 1 ? 's' : ''} par semaine`}>
+          <Segment
+            options={([1, 2, 3, 4, 5] as SessionsPerWeek[]).map((n) => ({ value: String(n), label: String(n), a11y: `${n} séance${n > 1 ? 's' : ''} par semaine` }))}
+            value={String(sessions)}
+            onChange={(v) => pickSessions(Number(v) as SessionsPerWeek)}
+          />
+          <View style={styles.rowBetween}>
             <Txt variant="caption" muted>
               Tes jours d’entraînement
             </Txt>
-            <Txt variant="caption" color={days.length === sessions ? t.ok : t.warn}>
-              {days.length}/{sessions} choisi{sessions > 1 ? 's' : ''}
+            <Txt variant="caption" color={daysOk ? t.ok : t.warn} style={{ fontWeight: '600' }}>
+              {days.length}/{sessions}
             </Txt>
-          </Row>
+          </View>
           <DayPicker selected={days} onToggle={toggleDay} />
+          {!daysOk && (
+            <Txt variant="caption" color={t.warn}>
+              Choisis encore {sessions - days.length} jour{sessions - days.length > 1 ? 's' : ''}.
+            </Txt>
+          )}
         </Section>
 
-        {/* ---------- 5. Temps visé : propositions ---------- */}
-        {mode === 'chrono' && base && (
-          <Section n={5} title="Ton chrono" right={<Txt muted>niveau actuel ≈ {formatTime(base.predictedNowSec)}</Txt>}>
-            <View style={styles.modeRow}>
-              {suggestions.map((s) => {
-                const active = choice === s.label;
-                const conf = assessGoal({ mode: 'chrono', sport: 'running', distanceKm: km, targetTimeSec: s.timeSec, eventDate }, currentLevel, start, opts).confidence;
-                return (
-                  <Pressable
-                    key={s.label}
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected: active }}
-                    onPress={() => setChoice(s.label)}
-                    style={[styles.timeCard, { borderColor: active ? t.accent : t.line, backgroundColor: active ? t.accentSoft : t.surface }]}>
-                    <Txt variant="caption" color={active ? t.accent : t.textSecondary} style={{ fontWeight: '700' }}>
-                      {s.label}
-                    </Txt>
-                    <Txt variant="title" style={{ fontVariant: ['tabular-nums'] }}>
-                      {formatTime(s.timeSec)}
-                    </Txt>
-                    <Txt variant="caption" muted>
-                      {formatPace(s.timeSec / km)} /km
-                    </Txt>
-                    <Txt variant="caption" color={confColor(conf, t)} style={{ fontWeight: '700' }}>
-                      {conf} %
-                    </Txt>
-                  </Pressable>
-                );
-              })}
-            </View>
-            <Pressable
-              accessibilityRole="radio"
-              accessibilityState={{ selected: choice === 'perso' }}
-              onPress={() => {
-                setCustomSec(targetSec ?? base.achievable.likelySec);
-                setChoice('perso');
-              }}
-              style={[styles.customRow, { borderColor: choice === 'perso' ? t.accent : t.line, backgroundColor: choice === 'perso' ? t.accentSoft : t.surface }]}>
-              {choice === 'perso' && targetSec && bounds ? (
-                <Row style={{ justifyContent: 'space-between', flex: 1 }}>
-                  <RoundBtn icon="remove" label="Plus rapide" onPress={() => setCustomSec(Math.max(bounds.min, targetSec - stepFor(targetSec)))} />
-                  <View style={{ alignItems: 'center' }}>
-                    <Txt variant="title" style={{ fontVariant: ['tabular-nums'] }}>
-                      {formatTime(targetSec)}
-                    </Txt>
-                    <Txt variant="caption" muted>
-                      {formatPace(targetSec / km)} /km · entre {formatTime(bounds.min)} et {formatTime(bounds.max)}
-                    </Txt>
-                  </View>
-                  <RoundBtn icon="add" label="Plus lent" onPress={() => setCustomSec(Math.min(bounds.max, targetSec + stepFor(targetSec)))} />
-                </Row>
-              ) : (
-                <Row>
-                  <Ionicons name="options" size={18} color={t.accent} />
-                  <Txt color={t.accent} style={{ fontWeight: '700' }}>
-                    Ajuster mon chrono
-                  </Txt>
-                </Row>
-              )}
-            </Pressable>
-          </Section>
-        )}
-
         {/* ---------- Verdict ---------- */}
-        {problem ? (
-          <Txt color={t.bad}>{problem}</Txt>
+        {baseProblem ? (
+          <View style={[styles.notice, { backgroundColor: t.flameSoft }]}>
+            <Ionicons name="alert-circle" size={16} color={t.bad} />
+            <Txt variant="caption" color={t.bad} style={{ flex: 1 }}>
+              {baseProblem}
+            </Txt>
+          </View>
+        ) : targetProblem ? (
+          <View style={[styles.notice, { backgroundColor: t.flameSoft }]}>
+            <Ionicons name="alert-circle" size={16} color={t.bad} />
+            <Txt variant="caption" color={t.bad} style={{ flex: 1 }}>
+              Temps visé : {targetProblem}
+            </Txt>
+            {fixTarget ? (
+              <Pressable accessibilityRole="button" onPress={() => setTarget(fixTarget)} hitSlop={8}>
+                <Txt variant="caption" color={t.accent} style={{ fontWeight: '700' }}>
+                  Viser {formatTime(fixTarget)}
+                </Txt>
+              </Pressable>
+            ) : null}
+          </View>
         ) : assessment ? (
-          <View style={[styles.verdict, { backgroundColor: t.surface, borderColor: tone }]}>
-            <Row style={{ justifyContent: 'space-between', alignItems: 'flex-end' }}>
+          <View style={[styles.card, styles.shadow, { backgroundColor: t.surface }]}>
+            <View style={styles.rowBetween}>
               <View style={{ flex: 1, gap: 2 }}>
-                <Txt variant="label" muted>
+                <Txt variant="caption" muted>
                   Tes chances
                 </Txt>
-                <Txt variant="title" color={tone}>
+                <Txt style={styles.verdictTitle} color={tone}>
                   {assessment.title}
                 </Txt>
               </View>
-              <Txt variant="hero" color={tone} style={{ fontSize: 40, lineHeight: 44 }}>
-                {assessment.confidence}%
-              </Txt>
-            </Row>
-            <ProgressBar value={assessment.confidence / 100} colors={[tone, tone]} height={10} />
-            <Txt>{assessment.message}</Txt>
-            {levers.length > 0 && (
-              <View style={{ gap: Spacing.s }}>
-                <Txt variant="caption" muted>
-                  Pour augmenter tes chances
+              <Txt style={styles.verdictPct} color={tone}>
+                {assessment.confidence}
+                <Txt style={styles.verdictPctUnit} color={tone}>
+                  %
                 </Txt>
-                <Row style={{ flexWrap: 'wrap' }}>
-                  {levers.map((l) => (
-                    <Pressable key={l.label} accessibilityRole="button" onPress={l.apply} style={[styles.lever, { backgroundColor: t.accentSoft }]}>
-                      <Ionicons name="trending-up" size={14} color={t.accent} />
-                      <Txt variant="caption" color={t.accent} style={{ fontWeight: '700' }}>
-                        {l.label} → {l.confidence} %
-                      </Txt>
-                    </Pressable>
-                  ))}
-                </Row>
+              </Txt>
+            </View>
+            <ProgressBar value={assessment.confidence / 100} colors={[tone, tone]} height={6} />
+            <Txt muted>{assessment.message}</Txt>
+            {levers.length > 0 && (
+              <View style={styles.wrap}>
+                {levers.map((l) => (
+                  <Pressable key={l.label} accessibilityRole="button" onPress={l.apply} style={({ pressed }) => [styles.lever, { backgroundColor: t.accentSoft, opacity: pressed ? 0.7 : 1 }]}>
+                    <Ionicons name="trending-up" size={14} color={t.accent} />
+                    <Txt variant="caption" color={t.accent} style={{ fontWeight: '600' }}>
+                      {l.label} · {l.confidence} %
+                    </Txt>
+                  </Pressable>
+                ))}
               </View>
             )}
           </View>
         ) : null}
 
-        {error && <Txt color={t.bad}>{error}</Txt>}
+        {error && (
+          <Txt color={t.bad} style={{ textAlign: 'center' }}>
+            {error}
+          </Txt>
+        )}
         <Button
-          icon="rocket"
+          icon={full ? 'lock-closed' : 'rocket'}
           label={
             saving
               ? 'Création du plan…'
@@ -484,10 +557,10 @@ export default function GoalScreen() {
                   : 'Créer mon plan'
           }
           onPress={submit}
-          disabled={!request || saving || full}
+          disabled={!request || !daysOk || saving || full}
         />
         <Txt variant="caption" muted style={{ textAlign: 'center' }}>
-          Le plan démarre le {formatDateFr(start, { weekday: 'long', day: 'numeric', month: 'long' })}. Tu pourras en suivre jusqu’à {MAX_ACTIVE_PLANS} en même temps.
+          Début du plan : {formatDateFr(start, { weekday: 'long', day: 'numeric', month: 'long' })}
         </Txt>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -508,58 +581,75 @@ function feasibilityTone(f: Feasibility | undefined, t: Theme): string {
 
 const confColor = (c: number, t: Theme) => (c >= 70 ? t.ok : c >= 45 ? t.warn : c >= 25 ? t.flame : t.bad);
 
-// ---------- Petits composants ----------
+// ---------- Composants ----------
 
-function Section({ n, title, right, children }: { n: number; title: string; right?: ReactNode; children: ReactNode }) {
+function Section({ title, right, children }: { title: string; right?: string; children: ReactNode }) {
   const t = useTheme();
   return (
-    <View style={[styles.section, { backgroundColor: t.surface, borderColor: t.line }]}>
-      <Row style={{ justifyContent: 'space-between' }}>
-        <Row style={{ flexShrink: 1 }}>
-          <LinearGradient colors={Gradients.energy} style={styles.stepNum}>
-            <Txt style={{ fontWeight: '800', fontSize: 13 }} color="#fff">
-              {n}
-            </Txt>
-          </LinearGradient>
-          <Txt variant="title" numberOfLines={1} style={{ flexShrink: 1 }}>
-            {title}
+    <View style={{ gap: Spacing.s }}>
+      <View style={[styles.rowBetween, { paddingHorizontal: 4 }]}>
+        <Txt style={styles.sectionTitle} color={t.textSecondary}>
+          {title}
+        </Txt>
+        {right ? (
+          <Txt variant="caption" color={t.accent} style={{ fontWeight: '600' }} numberOfLines={1}>
+            {right}
           </Txt>
-        </Row>
-        {right}
-      </Row>
-      {children}
+        ) : null}
+      </View>
+      <View style={[styles.card, styles.shadow, { backgroundColor: t.surface }]}>{children}</View>
     </View>
   );
 }
 
-function HeroStat({ icon, value, label }: { icon: 'calendar' | 'time' | 'repeat' | 'speedometer'; value: string; label: string }) {
+function HeroStat({ value, label }: { value: string; label: string }) {
   return (
     <View style={styles.heroStat}>
-      <Ionicons name={icon} size={14} color="rgba(255,255,255,0.8)" />
-      <Txt style={{ fontWeight: '800', fontVariant: ['tabular-nums'] }} color="#fff" numberOfLines={1}>
+      <Txt style={styles.heroStatValue} color="#fff" numberOfLines={1}>
         {value}
       </Txt>
-      <Txt variant="caption" color="rgba(255,255,255,0.7)" numberOfLines={1}>
+      <Txt style={styles.heroStatLabel} color="rgba(255,255,255,0.7)" numberOfLines={1}>
         {label}
       </Txt>
     </View>
   );
 }
 
-function ModeTile({ icon, title, hint, active, onPress }: { icon: 'stopwatch' | 'flag' | 'trophy' | 'help-circle'; title: string; hint: string; active: boolean; onPress: () => void }) {
+/** Contrôle segmenté façon iOS : la sélection est une pastille claire qui « flotte » sur la piste. */
+function Segment({
+  options,
+  value,
+  onChange,
+}: {
+  options: Array<{ value: string; label: string; icon?: IconName; a11y?: string }>;
+  value: string;
+  onChange: (v: string) => void;
+}) {
   const t = useTheme();
   return (
-    <Pressable
-      accessibilityRole="radio"
-      accessibilityState={{ selected: active }}
-      onPress={onPress}
-      style={[styles.modeTile, { borderColor: active ? t.accent : t.line, backgroundColor: active ? t.accentSoft : t.surface }]}>
-      <Ionicons name={icon} size={22} color={active ? t.accent : t.textSecondary} />
-      <Txt style={{ fontWeight: '700' }}>{title}</Txt>
-      <Txt variant="caption" muted numberOfLines={1}>
-        {hint}
-      </Txt>
-    </Pressable>
+    <View style={[styles.segTrack, { backgroundColor: t.surfaceAlt }]} accessibilityRole="radiogroup">
+      {options.map((o) => {
+        const active = o.value === value;
+        return (
+          <Pressable
+            key={o.value}
+            accessibilityRole="radio"
+            accessibilityLabel={o.a11y ?? o.label}
+            accessibilityState={{ selected: active }}
+            onPress={() => {
+              if (active) return;
+              Haptics.selectionAsync().catch(() => {});
+              onChange(o.value);
+            }}
+            style={[styles.seg, active && [styles.segActive, { backgroundColor: t.surface }]]}>
+            {o.icon ? <Ionicons name={o.icon} size={16} color={active ? t.accent : t.textSecondary} /> : null}
+            <Txt style={styles.segLabel} color={active ? t.text : t.textSecondary} numberOfLines={1}>
+              {o.label}
+            </Txt>
+          </Pressable>
+        );
+      })}
+    </View>
   );
 }
 
@@ -569,9 +659,12 @@ function Pill({ label, active, onPress }: { label: string; active: boolean; onPr
     <Pressable
       accessibilityRole="radio"
       accessibilityState={{ selected: active }}
-      onPress={onPress}
-      style={[styles.pill, { borderColor: active ? t.accent : t.line, backgroundColor: active ? t.accent : 'transparent' }]}>
-      <Txt style={{ fontWeight: '700' }} color={active ? t.accentText : t.text}>
+      onPress={() => {
+        Haptics.selectionAsync().catch(() => {});
+        onPress();
+      }}
+      style={({ pressed }) => [styles.pill, { backgroundColor: active ? t.accent : t.surfaceAlt, opacity: pressed ? 0.8 : 1 }]}>
+      <Txt style={styles.pillLabel} color={active ? t.accentText : t.text}>
         {label}
       </Txt>
     </Pressable>
@@ -590,9 +683,12 @@ function DayPicker({ selected, onToggle }: { selected: number[]; onToggle: (d: n
             accessibilityRole="checkbox"
             accessibilityLabel={DAY_NAMES[i]}
             accessibilityState={{ checked: on }}
-            onPress={() => onToggle(i)}
-            style={[styles.day, { borderColor: on ? t.accent : t.line, backgroundColor: on ? t.accent : t.surfaceAlt }]}>
-            <Txt style={{ fontWeight: '800' }} color={on ? t.accentText : t.textSecondary}>
+            onPress={() => {
+              Haptics.selectionAsync().catch(() => {});
+              onToggle(i);
+            }}
+            style={[styles.day, { backgroundColor: on ? t.accent : t.surfaceAlt }]}>
+            <Txt style={styles.dayLabel} color={on ? t.accentText : t.textSecondary}>
               {d}
             </Txt>
           </Pressable>
@@ -602,70 +698,125 @@ function DayPicker({ selected, onToggle }: { selected: number[]; onToggle: (d: n
   );
 }
 
-function RoundBtn({ icon, label, onPress }: { icon: 'add' | 'remove'; label: string; onPress: () => void }) {
+function RoundBtn({ icon, label, onPress, disabled }: { icon: 'add' | 'remove'; label: string; onPress: () => void; disabled?: boolean }) {
   const t = useTheme();
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={[styles.round, { borderColor: t.line, backgroundColor: t.surface }]}>
-      <Ionicons name={icon} size={22} color={t.accent} />
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      onPress={() => {
+        Haptics.selectionAsync().catch(() => {});
+        onPress();
+      }}
+      style={({ pressed }) => [styles.round, styles.shadow, { backgroundColor: t.surface, opacity: disabled ? 0.35 : pressed ? 0.7 : 1 }]}>
+      <Ionicons name={icon} size={20} color={t.accent} />
     </Pressable>
   );
 }
 
-function Metric({ label, unit, value, onChange }: { label: string; unit: string; value: string; onChange: (v: string) => void }) {
+function Field({
+  label,
+  unit,
+  value,
+  onChange,
+  keyboardType,
+  placeholder,
+  flex,
+}: {
+  label: string;
+  unit?: string;
+  value: string;
+  onChange: (v: string) => void;
+  keyboardType: 'decimal-pad' | 'number-pad' | 'numbers-and-punctuation';
+  placeholder?: string;
+  flex?: boolean;
+}) {
   const t = useTheme();
   return (
-    <View style={[styles.metric, { borderColor: t.line, backgroundColor: t.surface }]}>
+    <View style={[styles.field, { backgroundColor: t.surfaceAlt }, flex && { flex: 1 }]}>
       <Txt variant="caption" muted>
         {label}
       </Txt>
-      <Row style={{ gap: 4 }}>
+      <View style={styles.row}>
         <TextInput
-          accessibilityLabel={`${label} en ${unit}`}
+          accessibilityLabel={label}
           value={value}
           onChangeText={onChange}
-          placeholder="—"
+          placeholder={placeholder}
           placeholderTextColor={t.textSecondary}
-          keyboardType="decimal-pad"
-          maxLength={5}
-          style={[styles.metricInput, { color: t.text }]}
+          keyboardType={keyboardType}
+          returnKeyType="done"
+          maxLength={8}
+          style={[styles.fieldInput, { color: t.text }]}
         />
-        <Txt muted>{unit}</Txt>
-      </Row>
+        {unit ? (
+          <Txt variant="caption" muted>
+            {unit}
+          </Txt>
+        ) : null}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  page: { padding: Spacing.l, gap: Spacing.l, paddingBottom: Spacing.xxl },
+  page: { padding: Spacing.l, gap: Spacing.xl, paddingBottom: Spacing.xxl * 2 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.s },
+  rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.s },
+  wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.s },
+  card: { borderRadius: 22, padding: Spacing.l, gap: Spacing.m },
+  shadow: { boxShadow: '0 1px 2px rgba(11,16,32,0.04), 0 6px 20px rgba(11,16,32,0.06)' },
+  divider: { height: StyleSheet.hairlineWidth, marginVertical: Spacing.xs },
+  sectionTitle: { fontSize: 13, fontWeight: '600', letterSpacing: 0.2 },
+
+  heroContent: { flex: 1, justifyContent: 'flex-end', gap: Spacing.m },
   heroTop: { position: 'absolute', top: Spacing.l, left: Spacing.l, right: Spacing.l, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  heroTitle: { fontSize: 46, lineHeight: 50 },
-  heroGlass: { flexDirection: 'row', padding: Spacing.m, gap: Spacing.s, marginTop: Spacing.s, borderRadius: Radius.m },
-  heroStat: { flex: 1, alignItems: 'center', gap: 1, minWidth: 0 },
+  glassChip: { backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
+  glassChipText: { fontSize: 12, fontWeight: '600', letterSpacing: 0.2 },
   levelPill: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
-  levelText: { fontWeight: '800', fontSize: 13 },
   bars: { flexDirection: 'row', alignItems: 'flex-end', gap: 2 },
-  bar: { width: 4, borderRadius: 2, backgroundColor: '#fff' },
-  section: { borderWidth: 1, borderRadius: Radius.l, padding: Spacing.l, gap: Spacing.m },
-  stepNum: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
-  modeRow: { flexDirection: 'row', gap: Spacing.s },
-  modeTile: { flex: 1, borderWidth: 1.5, borderRadius: Radius.m, padding: Spacing.m, gap: 2 },
+  bar: { width: 3, borderRadius: 2, backgroundColor: '#fff' },
+  heroKicker: { fontSize: 12, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase' },
+  heroTitle: { fontSize: 44, lineHeight: 50, fontWeight: '800', letterSpacing: -1.2 },
+  heroSub: { fontSize: 24, lineHeight: 30, fontWeight: '600', letterSpacing: -0.4, fontVariant: ['tabular-nums'] },
+  heroStats: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: Radius.m, paddingVertical: 10, paddingHorizontal: 6 },
+  heroStat: { flex: 1, alignItems: 'center', minWidth: 0 },
+  heroStatValue: { fontSize: 15, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  heroStatLabel: { fontSize: 11 },
+  heroDivider: { width: StyleSheet.hairlineWidth, alignSelf: 'stretch', backgroundColor: 'rgba(255,255,255,0.3)' },
+
+  segTrack: { flexDirection: 'row', borderRadius: 14, padding: 3, gap: 2 },
+  seg: { flex: 1, minHeight: 38, borderRadius: 11, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 6 },
+  segActive: { boxShadow: '0 1px 3px rgba(11,16,32,0.12)' },
+  segLabel: { fontSize: 14, fontWeight: '600' },
+  pill: { borderRadius: 999, paddingHorizontal: 16, minHeight: 36, justifyContent: 'center' },
+  pillLabel: { fontSize: 14, fontWeight: '600' },
+
+  timeBox: { borderRadius: 16, borderWidth: 1, paddingVertical: Spacing.m, paddingHorizontal: Spacing.l, alignItems: 'center', gap: 2 },
+  timeInput: { fontSize: 40, fontWeight: '700', letterSpacing: -1, textAlign: 'center', minWidth: 180, paddingVertical: 2, fontVariant: ['tabular-nums'] },
+  suggestRow: { flexDirection: 'row', gap: Spacing.s },
+  suggest: { flex: 1, borderRadius: 14, borderWidth: 1, paddingVertical: Spacing.m, alignItems: 'center', gap: 2 },
+  suggestTime: { fontSize: 17, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  confRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  confDot: { width: 6, height: 6, borderRadius: 3 },
+  notice: { flexDirection: 'row', alignItems: 'center', gap: Spacing.s, borderRadius: 12, padding: Spacing.m },
+
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.s },
-  tile: { flexBasis: '47%', flexGrow: 1, borderWidth: 1.5, borderRadius: Radius.m, padding: Spacing.m, gap: 2 },
-  subCard: { borderRadius: Radius.m, padding: Spacing.m, gap: Spacing.s },
-  metric: { flex: 1, borderWidth: 1, borderRadius: Radius.s, paddingHorizontal: Spacing.m, paddingVertical: Spacing.s },
-  metricInput: { flex: 1, minWidth: 0, fontSize: 20, fontWeight: '700', paddingVertical: 2, fontVariant: ['tabular-nums'] },
-  input: { borderWidth: 1, borderRadius: Radius.s, paddingHorizontal: Spacing.m, minHeight: 48, fontSize: 16 },
-  big: { fontSize: 24, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  pill: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 14, minHeight: 40, justifyContent: 'center' },
-  days: { flexDirection: 'row', justifyContent: 'space-between', gap: 4 },
-  day: { flex: 1, maxWidth: 44, aspectRatio: 1, borderRadius: 999, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  sessionsRow: { flexDirection: 'row', gap: Spacing.s },
-  sessionBtn: { flex: 1, borderWidth: 1.5, borderRadius: Radius.m, paddingVertical: Spacing.m, alignItems: 'center', gap: 4 },
-  dots: { flexDirection: 'row', gap: 2, height: 5 },
-  dot: { width: 5, height: 5, borderRadius: 3 },
-  timeCard: { flex: 1, borderWidth: 1.5, borderRadius: Radius.m, padding: Spacing.m, gap: 2, alignItems: 'center' },
-  customRow: { borderWidth: 1.5, borderRadius: Radius.m, padding: Spacing.m, flexDirection: 'row', justifyContent: 'center', minHeight: 56, alignItems: 'center' },
-  round: { width: 44, height: 44, borderRadius: 22, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  verdict: { borderWidth: 2, borderRadius: Radius.l, padding: Spacing.l, gap: Spacing.m },
+  tile: { flexBasis: '47%', flexGrow: 1, borderRadius: 14, borderWidth: 1, padding: Spacing.m, gap: 2 },
+  field: { borderRadius: 12, paddingHorizontal: Spacing.m, paddingVertical: Spacing.s, gap: 0 },
+  fieldInput: { flex: 1, minWidth: 0, fontSize: 18, fontWeight: '600', paddingVertical: 4, fontVariant: ['tabular-nums'] },
+
+  stepper: { flexDirection: 'row', alignItems: 'center', borderRadius: 16, padding: Spacing.s },
+  stepValue: { fontSize: 32, lineHeight: 38, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  round: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  days: { flexDirection: 'row', justifyContent: 'space-between', gap: 6 },
+  day: { flex: 1, maxWidth: 42, aspectRatio: 1, borderRadius: 999, alignItems: 'center', justifyContent: 'center' },
+  dayLabel: { fontSize: 13, fontWeight: '600' },
+
+  verdictTitle: { fontSize: 19, fontWeight: '700', letterSpacing: -0.3 },
+  verdictPct: { fontSize: 38, lineHeight: 42, fontWeight: '700', letterSpacing: -1, fontVariant: ['tabular-nums'] },
+  verdictPctUnit: { fontSize: 20, fontWeight: '600' },
   lever: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
 });

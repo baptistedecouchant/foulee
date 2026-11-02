@@ -585,3 +585,27 @@ describe('connexion quotidienne et bienvenue', () => {
     expect(tipOfDay('2026-11-02').id).toBe(tipOfDay('2026-11-02').id);
   });
 });
+
+import { parseGoalTime } from '../src/index.ts';
+
+describe('saisie du temps visé', () => {
+  it('comprend les formats courants', () => {
+    expect(parseGoalTime('45:00', 10)).toBe(2700);
+    expect(parseGoalTime('45', 10)).toBe(2700);
+    expect(parseGoalTime(' 44:30 ', 10)).toBe(2670);
+    expect(parseGoalTime("44'30", 10)).toBe(2670);
+    expect(parseGoalTime('1:45:00', 21.0975)).toBe(6300);
+    expect(parseGoalTime('1h45', 21.0975)).toBe(6300);
+    expect(parseGoalTime('1H45', 21.0975)).toBe(6300);
+    expect(parseGoalTime("1h45'", 21.0975)).toBe(6300);
+    expect(parseGoalTime('3h', 42.195)).toBe(10800);
+    expect(parseGoalTime('1h45:30', 21.0975)).toBe(6330);
+  });
+  it('« 1:45 » sur un semi = 1 h 45', () => {
+    expect(parseGoalTime('1:45', 21.0975)).toBe(6300);
+    expect(parseGoalTime('3:59', 42.195)).toBe(14340);
+  });
+  it('refuse les saisies invalides', () => {
+    for (const bad of ['', 'abc', '45:75', '1h75', '1:2:3:4', ':']) expect(parseGoalTime(bad, 10)).toBeNull();
+  });
+});

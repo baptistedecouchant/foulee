@@ -38,7 +38,7 @@ export default function PlansScreen() {
               {goalTitle(p.plan)}
             </Txt>
             <Txt color="rgba(255,255,255,0.85)">
-              {p.plan.weeks.length} semaines · {p.plan.request.sessionsPerWeek} séances par semaine · allure {formatPace(p.plan.racePaceSecPerKm)} /km
+              {p.plan.weeks.length} semaines · {p.plan.request.sessionsPerWeek} séance{p.plan.request.sessionsPerWeek > 1 ? "s" : ""} par semaine · allure {formatPace(p.plan.racePaceSecPerKm)} /km
             </Txt>
             <ProgressBar value={pr.ratio} height={10} track="rgba(255,255,255,0.25)" colors={Gradients.gold} />
             <Txt variant="caption" color="rgba(255,255,255,0.85)">

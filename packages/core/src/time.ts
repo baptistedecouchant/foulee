@@ -76,3 +76,25 @@ export function suggestedStartDate(todayIso: string): string {
 export function weeksUntil(startIso: string, eventIso: string): number {
   return Math.floor(daysBetween(startIso, eventIso) / 7) + 1;
 }
+
+/**
+ * Lit un temps saisi librement : « 45 », « 45:00 », « 1:45:00 », « 1h45 », « 1h45:30 ».
+ * « 1:45 » sur un semi est compris comme 1 h 45 (1 min 45 s serait impossible).
+ */
+export function parseGoalTime(raw: string, km: number): number | null {
+  const s = raw.trim().toLowerCase().replace(/\s/g, '').replace(/[’'.,]/g, ':').replace(/min$/, '').replace(/:+$/, '');
+  const h = s.match(/^(\d{1,2})h(\d{0,2})(?::(\d{1,2}))?$/);
+  if (h) {
+    const [hh, mm, ss] = [Number(h[1]), Number(h[2] || 0), Number(h[3] || 0)];
+    return mm < 60 && ss < 60 ? hh * 3600 + mm * 60 + ss : null;
+  }
+  const sec = parseTime(s);
+  if (sec == null) return null;
+  const parts = s.split(':').length;
+  if (parts === 2 && km > 0 && sec / km < 150) {
+    const [a, b] = s.split(':').map(Number);
+    return a * 3600 + b * 60;
+  }
+  return sec;
+}
+
