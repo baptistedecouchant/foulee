@@ -277,7 +277,7 @@ function StepList({ steps, nested }: { steps: Step[]; nested?: boolean }) {
               </Txt>
             </View>
             <Txt variant="number" color={s.zone === 'rec' ? t.textSecondary : t.text}>
-              {s.zone === 'rec' ? 'trot' : `${formatPace(s.pace.lo)}–${formatPace(s.pace.hi)} /km`}
+              {s.zone === 'rec' ? 'très facile' : `${formatPace(s.pace.lo)}–${formatPace(s.pace.hi)} /km`}
             </Txt>
           </Row>
         ),

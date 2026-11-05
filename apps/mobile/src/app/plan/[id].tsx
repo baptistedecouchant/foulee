@@ -21,9 +21,9 @@ const PHASE_LABEL: Record<Phase, string> = { base: '🧱 Fondations', dev: '📈
 
 export default function PlanScreen() {
   const t = useTheme();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, tab: initialTab } = useLocalSearchParams<{ id: string; tab?: string }>();
   const { getPlan, removePlan, setEnrichment, reschedulePlan } = useStore();
-  const [tab, setTab] = useState<'plan' | 'vma'>('plan');
+  const [tab, setTab] = useState<'plan' | 'vma'>(initialTab === 'vma' ? 'vma' : 'plan');
   const [measured, setMeasured] = useState<number | null>(null);
   const [editStart, setEditStart] = useState(false);
   const [newStart, setNewStart] = useState<string | null>(null);

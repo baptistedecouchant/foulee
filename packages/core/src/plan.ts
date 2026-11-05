@@ -26,13 +26,13 @@ export const DAY_SETS: Record<SessionsPerWeek, number[]> = {
 };
 
 export const ZONE_LABELS: Record<Zone, string> = {
-  ef: 'Endurance',
+  ef: 'Footing',
   sl: 'Sortie longue',
   rec: 'Récupération',
-  seuil: 'Seuil',
-  vma: 'VMA',
-  fart: 'Rapide',
-  spe: 'Allure objectif',
+  seuil: 'Allure seuil',
+  vma: 'Allure VMA',
+  fart: 'Allure tempo',
+  spe: 'Allure course',
 };
 
 /** Intensité relative (0-1), utilisée pour le graphique de séance. */
@@ -66,7 +66,7 @@ const PHASE_FOCUS: Record<Phase, string> = {
 
 const DEFAULT_TIPS: Record<SessionType, string> = {
   ef: 'Allure conversation : tu dois pouvoir parler en phrases complètes. Plus lent que tu ne le crois.',
-  lignes: 'Accélérations progressives et relâchées, sans sprinter. Récupère en trottinant.',
+  lignes: 'Accélérations progressives et relâchées, sans sprinter. Récupération très facile entre chaque.',
   sl: "Pars lentement et garde une allure régulière. C'est la durée qui compte, pas la vitesse.",
   fartlek: 'Phases rapides soutenues mais contrôlées : la dernière doit être aussi bonne que la première.',
   vma: 'Régularité avant tout : le dernier fractionné aussi vite que le premier.',
@@ -388,7 +388,7 @@ export function describeSteps(steps: Step[]): string {
     .map((s) => {
       if (s.kind === 'repeat') return `${s.times}×(${describeSteps(s.steps)})`;
       const amount = s.durationSec != null ? (s.durationSec >= 60 ? `${Math.round(s.durationSec / 60)} min` : `${s.durationSec} s`) : fmtDist(s.distanceM ?? 0);
-      const what = s.zone === 'rec' ? 'trot' : `${fmt(s.pace.lo)}-${fmt(s.pace.hi)}/km`;
+      const what = s.zone === 'rec' ? 'récupération' : `${fmt(s.pace.lo)}-${fmt(s.pace.hi)}/km`;
       return `${s.label ? s.label + ' ' : ''}${amount} ${what}`;
     })
     .join(' ; ');

@@ -83,7 +83,7 @@ export function announceStep(step: LiveStep, next?: LiveStep): string {
   const parts: string[] = [];
   const name = step.rep ? `${step.label} ${step.rep.n} sur ${step.rep.of}` : step.label;
   if (step.zone === 'rec') {
-    parts.push(`Récupération : ${speakDuration(step.durationSec ?? step.expectedSec)} en trottinant.`);
+    parts.push(`Récupération : ${speakDuration(step.durationSec ?? step.expectedSec)} à allure très facile.`);
   } else if (step.durationSec != null) {
     const dist = (step.durationSec / mid(step.pace)) * 1000;
     parts.push(`${name}. ${speakDuration(step.durationSec)} à ${speakPace(mid(step.pace))}, soit environ ${speakDistance(dist)}.`);

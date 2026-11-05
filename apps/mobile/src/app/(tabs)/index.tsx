@@ -1,8 +1,9 @@
 import { router } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { BADGES, currentPace10k, ECONOMY, formatDuration, formatTime, LOGIN_XP, riegel } from '@foulee/core';
+import { BADGES, currentPace10k, daysBetween, ECONOMY, formatDuration, formatTime, LOGIN_XP, riegel } from '@foulee/core';
 
 import { Button, Card, Chip, Ionicons, LevelBadge, ProgressBar, Row, SectionTitle, StatPill, Txt } from '@/components/ui';
+import { HomePager, type PagerPage } from '@/components/home-pager';
 import { GradientCard, PhotoCard } from '@/components/visuals';
 import { Gradients, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -10,6 +11,8 @@ import { useTopInset } from '@/hooks/use-top-inset';
 import { imageForSession } from '@/lib/images';
 import { BADGE_ICON, daysLeft, fmtInt, goalTitle, planProgress, SESSION_ICON } from '@/lib/labels';
 import { formatDateFr, MAX_ACTIVE_PLANS, todayIso, useStore } from '@/lib/store';
+
+const PHASE_TITLE = { base: '🧱 Fondations', dev: '📈 Développement', spe: '🎯 Spécifique', taper: '🪶 Affûtage' } as const;
 
 /** 850 · 1,2k · 12k */
 const compact = (n: number) => (n < 1000 ? String(n) : `${String(Math.round(n / 100) / 10).replace('.', ',').replace(/,0$/, '')}k`);
@@ -56,59 +59,189 @@ export default function HomeScreen() {
     .sort((a, b) => b.v - a.v)
     .slice(0, 3);
 
-  return (
-    <ScrollView style={{ backgroundColor: t.background }} contentContainerStyle={[styles.page, { paddingTop: Spacing.l + top }]} contentInsetAdjustmentBehavior="automatic">
-      {/* ---------- Joueur : niveau, XP, série, points ---------- */}
-      <GradientCard colors={Gradients.night}>
-        <Row style={{ justifyContent: 'space-between' }}>
-          <View style={{ gap: 2 }}>
-            <Txt variant="label" color="rgba(255,255,255,0.7)">
-              {formatDateFr(today, { weekday: 'long', day: 'numeric', month: 'long' })}
-            </Txt>
-            <Txt variant="display" color="#fff">
-              {next?.s.date === today ? 'Séance au programme !' : 'Prêt à courir ?'}
-            </Txt>
-          </View>
-          <Row>
-            <Pressable accessibilityRole="button" accessibilityLabel="Montres et apps" onPress={() => router.push('/devices')} style={styles.watchBtn}>
-              <Ionicons name="watch" size={22} color="#fff" />
-            </Pressable>
-            <LevelBadge level={level.level} />
-          </Row>
-        </Row>
-        <View style={{ gap: 6 }}>
+  const goalPlan = goalBar ? plans.find((p) => p.id === goalBar.id) : undefined;
+  const phase = (() => {
+    if (!goalPlan) return null;
+    const pl = goalPlan.plan;
+    const n = pl.weeks.length;
+    const w = Math.min(n, Math.max(1, Math.floor(daysBetween(pl.request.startDate, today) / 7) + 1));
+    const vols = pl.weeks.map((wk) => pl.sessions.filter((x) => x.week === wk.n).reduce((acc, x) => acc + x.durationSec, 0));
+    const week = pl.sessions.filter((x) => x.week === w);
+    return { w, n, phase: pl.weeks[w - 1].phase, vols, max: Math.max(...vols), count: week.length, sec: week.reduce((acc, x) => acc + x.durationSec, 0) };
+  })();
+  const W = '#FFFFFF';
+  const M = 'rgba(255,255,255,0.75)';
+  const pages: PagerPage[] = [
+    goalBar
+      ? {
+          key: 'goal',
+          onPress: () => router.push({ pathname: '/plan/[id]', params: { id: goalBar.id } }),
+          content: (
+            <>
+              <Row style={{ justifyContent: 'space-between' }}>
+                <Txt variant="label" color={M}>
+                  🎯 Prochain objectif
+                </Txt>
+                <Txt variant="number" color={W}>
+                  {goalBar.days > 0 ? `J-${goalBar.days}` : 'Jour J'}
+                </Txt>
+              </Row>
+              <Txt style={styles.pageTitle} color={W} numberOfLines={1}>
+                {goalBar.title}
+              </Txt>
+              <ProgressBar value={goalBar.ratio} height={8} track="rgba(255,255,255,0.2)" colors={Gradients.gold} />
+              <Txt variant="caption" color={M}>
+                {Math.round(goalBar.ratio * 100)} % du chemin · {goalBar.done}/{goalBar.total} séances{goalBar.estimate ? ` · estimé ${goalBar.estimate}` : ''}
+              </Txt>
+            </>
+          ),
+        }
+      : {
+          key: 'goal',
+          onPress: () => router.push('/goal'),
+          content: (
+            <>
+              <Txt variant="label" color={M}>
+                🎯 Ton objectif
+              </Txt>
+              <Txt style={styles.pageTitle} color={W}>
+                Fixe ton premier objectif
+              </Txt>
+              <Txt variant="caption" color={M}>
+                Un chrono à battre ou une course à finir : ton plan est prêt en 1 minute.
+              </Txt>
+            </>
+          ),
+        },
+    ...(phase
+      ? [
+          {
+            key: 'phase',
+            onPress: () => router.push({ pathname: '/plan/[id]', params: { id: goalBar!.id } }),
+            content: (
+              <>
+                <Txt variant="label" color={M}>
+                  Semaine {phase.w}/{phase.n}
+                </Txt>
+                <Txt style={styles.pageTitle} color={W}>
+                  {PHASE_TITLE[phase.phase]}
+                </Txt>
+                <View style={styles.bars}>
+                  {phase.vols.map((v, i) => (
+                    <View key={i} style={{ flex: 1, height: 6 + (v / phase.max) * 26, borderRadius: 3, backgroundColor: i + 1 === phase.w ? '#FFD65C' : i + 1 < phase.w ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.3)' }} />
+                  ))}
+                </View>
+                <Txt variant="caption" color={M}>
+                  Cette semaine : {phase.count} séance{phase.count > 1 ? 's' : ''} · {formatDuration(phase.sec)}
+                </Txt>
+              </>
+            ),
+          },
+        ]
+      : []),
+    {
+      key: 'player',
+      onPress: () => router.push('/profile'),
+      content: (
+        <>
           <Row style={{ justifyContent: 'space-between' }}>
-            <Txt variant="number" color="#fff">
-              {level.title}
+            <Txt variant="label" color={M}>
+              ⭐ Niveau {level.level} · {level.title}
             </Txt>
-            <Txt variant="caption" color="rgba(255,255,255,0.75)">
+            <Txt variant="caption" color={M}>
               {fmtInt(level.intoLevel)} / {fmtInt(level.levelSpan)} XP
             </Txt>
           </Row>
-          <ProgressBar value={level.progress} track="rgba(255,255,255,0.15)" />
-        </View>
-        <Row>
-          <StatPill icon="flame" value={`${stats.streak} série`} color="#fff" bg="rgba(255,106,43,0.9)" />
-          <StatPill icon="calendar" value={`${loginDays} j`} color="#fff" bg="rgba(255,255,255,0.18)" />
-          <StatPill icon="cash" value={`${fmtInt(balance)} RC`} color={t.goldText} bg={t.gold} />
-          <StatPill icon="flash" value={`${fmtInt(level.xp)} XP`} color="#04281B" bg={t.xp} />
-        </Row>
-        <Pressable accessibilityRole="button" accessibilityLabel="Pas du jour" onPress={() => health !== 'connected' && router.push('/devices')} style={styles.stepsRow}>
-          <Txt style={{ fontSize: 18 }}>👟</Txt>
-          <Txt variant="number" color="#fff">
-            {health === 'connected' ? (steps == null ? '…' : `${compact(steps)} pas`) : 'Pas du jour'}
+          <ProgressBar value={level.progress} height={8} track="rgba(255,255,255,0.2)" />
+          <Row style={{ flexWrap: 'wrap', gap: 6 }}>
+            <StatPill icon="flame" value={`${stats.streak} série`} color="#fff" bg="rgba(255,106,43,0.9)" />
+            <StatPill icon="cash" value={`${fmtInt(balance)} RC`} color={t.goldText} bg={t.gold} />
+            <StatPill icon="flash" value={`${fmtInt(level.xp)} XP`} color="#04281B" bg={t.xp} />
+          </Row>
+        </>
+      ),
+    },
+    {
+      key: 'steps',
+      onPress: () => health !== 'connected' && router.push('/devices'),
+      content: (
+        <>
+          <Txt variant="label" color={M}>
+            👟 Pas du jour
+          </Txt>
+          <Txt style={styles.pageTitle} color={W}>
+            {health === 'connected' ? (steps == null ? '…' : `${compact(steps)} pas`) : 'Connecte Apple Santé'}
           </Txt>
           {health === 'connected' && steps != null ? (
-            <View style={{ flex: 1 }}>
-              <ProgressBar value={steps / 10000} height={6} track="rgba(255,255,255,0.15)" />
-            </View>
-          ) : (
-            <Txt variant="caption" color="rgba(255,255,255,0.7)" style={{ flex: 1 }}>
-              {health === 'available' ? 'Connecte Apple Santé' : 'avec Apple Santé, dans l’app installée'}
+            <ProgressBar value={steps / 10000} height={8} track="rgba(255,255,255,0.2)" colors={Gradients.xp} />
+          ) : null}
+          <Txt variant="caption" color={M}>
+            {health === 'connected' ? `Objectif 10k · ${Math.round(((steps ?? 0) / 10000) * 100)} %` : health === 'available' ? 'Touche pour connecter Apple Santé' : 'Disponible dans l’app installée (Apple Santé)'}
+          </Txt>
+        </>
+      ),
+    },
+    {
+      key: 'streak',
+      content: (
+        <>
+          <Row style={{ justifyContent: 'space-between' }}>
+            <Txt variant="label" color={M}>
+              🔥 {loginDays} jour{loginDays > 1 ? 's' : ''} d’affilée
             </Txt>
-          )}
-        </Pressable>
-      </GradientCard>
+            <Txt variant="caption" color={M}>
+              {loginDays > 0 && loginDays % 7 === 0 ? '🎁 Coffre ouvert !' : `🎁 Coffre dans ${7 - (loginDays % 7)} j`}
+            </Txt>
+          </Row>
+          <Row style={{ gap: 6 }}>
+            {Array.from({ length: 7 }).map((_, i) => (
+              <View key={i} style={[styles.day, { backgroundColor: i < (loginDays % 7 || (loginDays > 0 ? 7 : 0)) ? t.flame : 'rgba(255,255,255,0.2)' }]} />
+            ))}
+          </Row>
+          <Txt variant="caption" color={M}>
+            +{LOGIN_XP.perDay} XP par jour, {ECONOMY.streakChest} RC tous les 7 jours.
+          </Txt>
+        </>
+      ),
+    },
+  ];
+  const shortcuts = [
+    ...(goalBar ? [{ label: '📋 Mon plan', onPress: () => router.push({ pathname: '/plan/[id]', params: { id: goalBar.id } }) }] : []),
+    { label: '➕ Objectif', onPress: () => router.push('/goal') },
+    ...(goalBar ? [{ label: '⚡ Test VMA', onPress: () => router.push({ pathname: '/plan/[id]', params: { id: goalBar.id, tab: 'vma' } }) }] : []),
+    { label: '👟 Chaussures', onPress: () => router.push('/shoes') },
+    { label: '🏃 Mes courses', onPress: () => router.push('/runs') },
+    { label: '⌚ Montres', onPress: () => router.push('/devices') },
+  ];
+
+  return (
+    <ScrollView style={{ backgroundColor: t.background }} contentContainerStyle={[styles.page, { paddingTop: Spacing.l + top }]} contentInsetAdjustmentBehavior="automatic">
+      {/* ---------- En-tête ---------- */}
+      <Row style={{ justifyContent: 'space-between' }}>
+        <View style={{ gap: 2, flex: 1 }}>
+          <Txt variant="label" muted>
+            {formatDateFr(today, { weekday: 'long', day: 'numeric', month: 'long' })}
+          </Txt>
+          <Txt variant="display">{next?.s.date === today ? 'Séance au programme ! 🏃' : 'Prêt à courir ? 👋'}</Txt>
+        </View>
+        <LevelBadge level={level.level} size={48} />
+      </Row>
+
+      {/* ---------- Raccourcis ---------- */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -Spacing.l }} contentContainerStyle={{ gap: Spacing.s, paddingHorizontal: Spacing.l }}>
+        {shortcuts.map((c) => (
+          <Pressable
+            key={c.label}
+            accessibilityRole="button"
+            onPress={c.onPress}
+            style={({ pressed }) => [styles.shortcut, { backgroundColor: t.surface, borderColor: t.line, opacity: pressed ? 0.7 : 1 }]}>
+            <Txt style={{ fontWeight: '600' }}>{c.label}</Txt>
+          </Pressable>
+        ))}
+      </ScrollView>
+
+      {/* ---------- Modules qui défilent (Liquid Glass) ---------- */}
+      <HomePager image={goalPlan?.image ?? 'road'} pages={pages} />
 
       {/* ---------- Astuce du jour ---------- */}
       <Card>
@@ -120,35 +253,6 @@ export default function HomeScreen() {
         <Txt muted>{tip.text}</Txt>
         {!tipRead && <Button kind="secondary" small icon="checkmark" label={`J’ai lu (+${LOGIN_XP.tip} XP)`} onPress={readTip} />}
       </Card>
-
-      {/* ---------- Prochain objectif : barre de progression ---------- */}
-      {goalBar && (
-        <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/plan/[id]', params: { id: goalBar.id } })}>
-          <Card style={{ gap: Spacing.s }}>
-            <Row style={{ justifyContent: 'space-between' }}>
-              <Txt variant="label" muted>
-                🎯 Prochain objectif
-              </Txt>
-              <Chip tone="flame" icon="hourglass" label={goalBar.days > 0 ? `J-${goalBar.days}` : 'Jour J'} />
-            </Row>
-            <Txt style={{ fontWeight: '800', fontSize: 20 }}>{goalBar.title}</Txt>
-            <ProgressBar value={goalBar.ratio} height={12} colors={Gradients.energy} />
-            <Row style={{ justifyContent: 'space-between' }}>
-              <Txt variant="caption" muted>
-                {goalBar.done}/{goalBar.total} séances
-              </Txt>
-              <Txt style={{ fontWeight: '800' }} color={t.accent}>
-                {Math.round(goalBar.ratio * 100)} % du chemin 💪
-              </Txt>
-            </Row>
-            {goalBar.estimate ? (
-              <Txt variant="caption" muted>
-                Temps estimé aujourd’hui : {goalBar.estimate} → objectif {goalBar.target}
-              </Txt>
-            ) : null}
-          </Card>
-        </Pressable>
-      )}
 
       {/* ---------- Semaine de course ---------- */}
       {raceSoon && (
@@ -196,25 +300,6 @@ export default function HomeScreen() {
           </PhotoCard>
         </>
       ) : null}
-
-      {/* ---------- Série de connexion et coffre ---------- */}
-      <Card style={{ gap: Spacing.s }}>
-        <Row style={{ justifyContent: 'space-between' }}>
-          <Row>
-            <Ionicons name="calendar" size={20} color={t.flame} />
-            <Txt style={{ fontWeight: '800' }}>{loginDays} jour{loginDays > 1 ? 's' : ''} d’affilée</Txt>
-          </Row>
-          <Chip tone={loginDays > 0 && loginDays % 7 === 0 ? 'gold' : 'neutral'} icon="cube" label={loginDays > 0 && loginDays % 7 === 0 ? 'Coffre ouvert !' : `Coffre dans ${7 - (loginDays % 7)} j`} />
-        </Row>
-        <Row style={{ gap: 6 }}>
-          {Array.from({ length: 7 }).map((_, i) => (
-            <View key={i} style={[styles.day, { backgroundColor: i < (loginDays % 7 || (loginDays > 0 ? 7 : 0)) ? t.flame : t.surfaceAlt }]} />
-          ))}
-        </Row>
-        <Txt variant="caption" muted>
-          Ouvre Foulée chaque jour : +{LOGIN_XP.perDay} XP par jour, et un coffre de {ECONOMY.streakChest} RC tous les 7 jours.
-        </Txt>
-      </Card>
 
       {/* ---------- Challenge sponsorisé de la semaine ---------- */}
       <SectionTitle>🏆 Challenge de la semaine</SectionTitle>
@@ -364,6 +449,9 @@ const styles = StyleSheet.create({
   addCard: { width: 170, height: 190, borderRadius: Radius.l, borderWidth: 2, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', gap: Spacing.s, padding: Spacing.m },
   day: { flex: 1, height: 10, borderRadius: 5 },
   watchBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' },
+  shortcut: { borderRadius: 999, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 14, paddingVertical: 9 },
+  pageTitle: { fontSize: 20, fontWeight: '800', letterSpacing: -0.4 },
+  bars: { flexDirection: 'row', alignItems: 'flex-end', gap: 3, height: 32 },
   stepsRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.s, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 12, paddingHorizontal: Spacing.m, paddingVertical: 8 },
   badgeIcon: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
 });

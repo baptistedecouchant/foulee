@@ -13,6 +13,42 @@ import { useRunSession, type GpsState } from '@/lib/useRunSession';
 import { setPendingVma } from '@/lib/vma-bridge';
 
 // Écran de course : toujours sombre, gros chiffres, lisible en plein soleil et en courant.
+type ProgStep = { zone: string; label: string; durationSec?: number; distanceM?: number; expectedSec: number; pace: { lo: number; hi: number } };
+const paceOf = (s: ProgStep) => (s.zone === 'rec' ? 'très facile' : `${formatPace(s.pace.lo)}–${formatPace(s.pace.hi)}`);
+const sameStep = (a: ProgStep, b: ProgStep) => a.label === b.label && a.zone === b.zone && amount(a) === amount(b);
+
+/** Programme lisible : les répétitions (effort + récup) sont regroupées en une ligne « 6 × 400 m allure VMA + 1 min récup ». */
+function programLines(steps: ProgStep[]): Array<{ text: string; pace: string; muted?: boolean }> {
+  const out: Array<{ text: string; pace: string; muted?: boolean }> = [];
+  let i = 0;
+  while (i < steps.length) {
+    const a = steps[i];
+    const b = steps[i + 1];
+    // Motif effort + récupération répété
+    if (b && a.zone !== 'rec' && b.zone === 'rec') {
+      let k = 1;
+      while (steps[i + 2 * k] && steps[i + 2 * k + 1] && sameStep(steps[i + 2 * k], a) && sameStep(steps[i + 2 * k + 1], b)) k++;
+      // Dernier effort sans récupération derrière
+      const tail = steps[i + 2 * k] && sameStep(steps[i + 2 * k], a) ? 1 : 0;
+      if (k + tail > 1) {
+        out.push({ text: `${k + tail} × ${amount(a)} ${a.label.toLowerCase()} · récup ${amount(b)}`, pace: paceOf(a) });
+        i += 2 * k + tail;
+        continue;
+      }
+    }
+    out.push({ text: a.zone === 'rec' ? `Récupération ${amount(a)}` : `${a.label} · ${amount(a)}`, pace: paceOf(a), muted: a.zone === 'rec' });
+    i++;
+  }
+  return out;
+}
+
+/** « 400 m », « 1 min », « 30 s » */
+function amount(s: { durationSec?: number; distanceM?: number; expectedSec: number }): string {
+  if (s.distanceM) return s.distanceM >= 1000 ? `${String(Math.round(s.distanceM / 100) / 10).replace('.', ',')} km` : `${s.distanceM} m`;
+  const sec = s.durationSec ?? s.expectedSec;
+  return sec >= 60 ? `${Math.round(sec / 60)} min` : `${sec} s`;
+}
+
 const C = {
   bg: '#070B16',
   card: 'rgba(255,255,255,0.07)',
@@ -132,7 +168,7 @@ function Run({ entry, session }: { entry: PlanEntry; session: PlannedSession }) 
             {session.title}
           </Txt>
           <Txt color={C.muted}>
-            {formatDuration(session.durationSec)} · {(session.distanceM / 1000).toFixed(1).replace('.', ',')} km · {runner.steps.length} blocs
+            {formatDuration(session.durationSec)} · {(session.distanceM / 1000).toFixed(1).replace('.', ',')} km {runner.steps.some((x) => x.rep) ? ` · ${runner.steps.filter((x) => x.rep).length} fractions` : ''}
           </Txt>
 
           {warmup && (
@@ -142,16 +178,15 @@ function Run({ entry, session }: { entry: PlanEntry; session: PlannedSession }) 
           )}
 
           <Panel icon="list" title="Au programme">
-            {runner.steps
-              .filter((s, i, arr) => i === 0 || !(s.rep && arr[i - 1].rep && s.zone === arr[i - 1].zone))
+            {programLines(runner.steps)
               .slice(0, 8)
-              .map((s) => (
-                <Row key={s.index} style={{ justifyContent: 'space-between' }}>
+              .map((l, i) => (
+                <Row key={i} style={{ justifyContent: 'space-between' }}>
                   <Txt color="#fff" style={{ flex: 1 }}>
-                    {s.rep ? `${s.rep.of} × ${s.label}` : s.label}
+                    {l.text}
                   </Txt>
-                  <Txt variant="number" color={s.zone === 'rec' ? C.muted : '#fff'}>
-                    {s.zone === 'rec' ? 'trot' : `${formatPace(s.pace.lo)}–${formatPace(s.pace.hi)}`}
+                  <Txt variant="number" color={l.muted ? C.muted : '#fff'}>
+                    {l.pace}
                   </Txt>
                 </Row>
               ))}
@@ -170,7 +205,12 @@ function Run({ entry, session }: { entry: PlanEntry; session: PlannedSession }) 
 
           <Panel icon="settings" title="Réglages">
             <Row style={{ justifyContent: 'space-between' }}>
-              <Txt color="#fff">Coach vocal (allures, changements, alertes)</Txt>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Txt color="#fff">🔊 Coach vocal</Txt>
+                <Txt variant="caption" color={C.muted}>
+                  Allures, changements de bloc et alertes
+                </Txt>
+              </View>
               <Switch value={voice} onValueChange={setVoice} trackColor={{ true: '#3A4BFF', false: '#333' }} />
             </Row>
             {isDemo && (
@@ -276,6 +316,9 @@ function Run({ entry, session }: { entry: PlanEntry; session: PlannedSession }) 
 
   // ---------- En course ----------
   const s = v.step;
+  // Fractionné : seul le nombre de blocs à haute allure compte (pas les récupérations).
+  const efforts = runner.steps.filter((x) => x.rep);
+  const fractions = efforts.length ? { total: efforts.length, done: efforts.filter((x) => x.index < v.stepIndex).length } : null;
   const statusColor = v.paceStatus === 'too_fast' ? C.fast : v.paceStatus === 'too_slow' ? C.slow : v.paceStatus === 'ok' ? C.ok : C.muted;
   const statusText =
     s?.zone === 'rec' ? 'Récupère en trottinant' : v.paceStatus === 'too_fast' ? 'Trop rapide : ralentis' : v.paceStatus === 'too_slow' ? 'Trop lent : accélère' : v.paceStatus === 'ok' ? 'Bonne allure' : 'Mise en route…';
@@ -286,7 +329,16 @@ function Run({ entry, session }: { entry: PlanEntry; session: PlannedSession }) 
       <View style={styles.runBody}>
         {/* Bloc en cours */}
         <Row style={{ justifyContent: 'space-between' }}>
-          <Chip tone="glass" label={`Bloc ${v.stepIndex + 1}/${v.stepCount}`} />
+          <Chip
+            tone="glass"
+            label={
+              s?.rep
+                ? `Fraction ${s.rep.n}/${s.rep.of}`
+                : s?.zone === 'rec' && fractions
+                  ? `Récup · ${fractions.done}/${fractions.total} fractions faites`
+                  : (s?.label ?? '')
+            }
+          />
           <Row>
             {v.phase === 'paused' && <Chip tone="flame" icon="pause" label="Pause" />}
             <Chip
@@ -384,7 +436,7 @@ function Run({ entry, session }: { entry: PlanEntry; session: PlannedSession }) 
       {confirm ? (
         <View style={[styles.controls, { flexDirection: 'column' }]}>
           <Txt color="#fff" style={{ textAlign: 'center', fontWeight: '700' }}>
-            {confirm === 'finish' ? 'Terminer maintenant ? Les blocs restants ne seront pas comptés.' : 'Annuler la séance ? Rien ne sera enregistré.'}
+            {confirm === 'finish' ? 'Terminer maintenant ? La fin de la séance ne sera pas comptée.' : 'Annuler la séance ? Rien ne sera enregistré.'}
           </Txt>
           <Row>
             <View style={{ flex: 1 }}>
@@ -416,7 +468,7 @@ function Run({ entry, session }: { entry: PlanEntry; session: PlannedSession }) 
             label={v.phase === 'paused' ? 'Reprendre' : 'Pause'}
             onPress={v.phase === 'paused' ? runner.resume : runner.pause}
           />
-          <RoundBtn icon="play-skip-forward" label="Bloc suivant" onPress={runner.skip} />
+          <RoundBtn icon="play-skip-forward" label="Étape suivante" onPress={runner.skip} />
           <RoundBtn icon="flag" label="Terminer" onPress={() => setConfirm('finish')} />
         </View>
       )}
