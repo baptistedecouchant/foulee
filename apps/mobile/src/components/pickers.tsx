@@ -68,7 +68,9 @@ function FieldButton({ label, value, placeholder, onPress, big, error }: { label
         {label}
       </Txt>
       <View style={styles.fieldRow}>
-        <Txt style={[big ? styles.bigValue : styles.value, { color: value ? t.text : t.textSecondary }]}>{value ?? placeholder}</Txt>
+        <Txt style={[value && big ? styles.bigValue : styles.value, { color: value ? t.text : t.textSecondary, flexShrink: 1 }]} numberOfLines={1}>
+          {value ?? placeholder}
+        </Txt>
         <Ionicons name="chevron-down" size={18} color={t.textSecondary} />
       </View>
     </Pressable>
@@ -288,11 +290,11 @@ const styles = StyleSheet.create({
   sheetTitle: { fontSize: 17, fontWeight: '700', textAlign: 'center' },
   wheels: { flexDirection: 'row', gap: Spacing.s, alignItems: 'center' },
   wheel: { width: '100%', ...(Platform.OS === 'ios' ? { height: 190 } : {}), ...(Platform.OS === 'web' ? { height: 44, borderRadius: 10, borderWidth: 1, paddingHorizontal: 8, fontSize: 18 } : {}) },
-  field: { borderRadius: 14, borderWidth: 1, paddingHorizontal: Spacing.m, paddingVertical: Spacing.s, gap: 2 },
+  field: { borderRadius: 14, borderWidth: 1, paddingHorizontal: Spacing.m, paddingVertical: Spacing.s, gap: 4 },
   fieldBig: { paddingVertical: Spacing.m },
   fieldRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.s },
-  value: { fontSize: 17, fontWeight: '600' },
-  bigValue: { fontSize: 26, fontWeight: '700', letterSpacing: -0.5, fontVariant: ['tabular-nums'] },
+  value: { fontSize: 17, lineHeight: 24, fontWeight: '600' },
+  bigValue: { fontSize: 24, lineHeight: 32, fontWeight: '700', letterSpacing: -0.4, fontVariant: ['tabular-nums'] },
   calHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 4 },
   calRow: { flexDirection: 'row' },
   calDow: { flex: 1, textAlign: 'center' },

@@ -46,18 +46,17 @@ export default function SessionScreen() {
   const watchConnected = connections.garmin || connections.apple_health;
   const anyConnected = Object.values(connections).some(Boolean);
   const nutrition = nutritionFor(session, entry.plan.request.goal);
-  const warmup = warmupAdvice(session);
 
   return (
     <ScrollView style={{ backgroundColor: t.background }} contentContainerStyle={styles.page}>
       <Stack.Screen options={{ title: formatDateFr(session.date, { weekday: 'long', day: 'numeric', month: 'long' }) }} />
 
-      <PhotoCard image={imageForSession(session.type)} height={280}>
+      <PhotoCard image={imageForSession(session.type)} height={200}>
         <Row>
           <Chip tone="glass" icon={SESSION_ICON[session.type]} label={goalTitle(entry.plan)} />
           <Chip tone="gold" icon="cash" label={`+${ECONOMY.sessionValidated} RC`} />
         </Row>
-        <Txt variant="hero" color="#fff">
+        <Txt variant="display" color="#fff">
           {session.title}
         </Txt>
         <Txt color="rgba(255,255,255,0.9)">
@@ -65,6 +64,22 @@ export default function SessionScreen() {
         </Txt>
         <IntensityProfile steps={session.steps} height={46} color="#FFFFFF" />
       </PhotoCard>
+
+      {/* Conseil de la séance + un repère nutrition avant de partir */}
+      <Card>
+        <Txt variant="label" muted>
+          💡 Conseil
+        </Txt>
+        <Txt>{ai?.tip ?? session.tip}</Txt>
+        {(ai?.nutrition ?? nutrition.before[0]?.text) ? (
+          <View style={[styles.nutri, { backgroundColor: t.surfaceAlt }]}>
+            <Txt variant="caption" style={{ fontWeight: '700' }}>
+              🍝 Avant la séance{!ai?.nutrition && nutrition.before[0]?.when ? ` · ${nutrition.before[0].when}` : ''}
+            </Txt>
+            <Txt variant="caption">{ai?.nutrition ?? nutrition.before[0].text}</Txt>
+          </View>
+        ) : null}
+      </Card>
 
       <Button
         kind="gold"
@@ -125,61 +140,6 @@ export default function SessionScreen() {
           🗺️ Déroulé
         </Txt>
         <StepList steps={session.steps} />
-      </Card>
-
-      <Card>
-        <Row>
-          <Ionicons name={ai ? 'sparkles' : 'bulb'} size={18} color={t.violet} />
-          <Txt variant="label" muted>
-            {ai ? '💡 Conseil du coach' : '💡 Conseil'}
-          </Txt>
-        </Row>
-        <Txt>{ai?.tip ?? session.tip}</Txt>
-        {warmup && (
-          <>
-            <Row>
-              <Ionicons name="body" size={18} color={t.accent} />
-              <Txt variant="label" muted>
-                🔥 Échauffement et récupération
-              </Txt>
-            </Row>
-            <Txt>{warmup}</Txt>
-          </>
-        )}
-      </Card>
-
-      <Card>
-        <Row>
-          <Ionicons name="nutrition" size={18} color={t.xp} />
-          <Txt variant="label" muted>
-            🍝 Nutrition
-          </Txt>
-        </Row>
-        {ai?.nutrition ? <Txt style={{ fontWeight: '700' }}>{ai.nutrition}</Txt> : null}
-        {(
-          [
-            ['Avant', nutrition.before],
-            ['Pendant', nutrition.during],
-            ['Après', nutrition.after],
-          ] as const
-        )
-          .filter(([, tips]) => tips.length)
-          .map(([title, tips]) => (
-            <View key={title} style={{ gap: 6 }}>
-              <Chip tone={title === 'Avant' ? 'accent' : title === 'Pendant' ? 'gold' : 'ok'} label={title} />
-              {tips.map((tip, i) => (
-                <Row key={i} style={{ alignItems: 'flex-start' }}>
-                  <Ionicons name={tip.icon} size={16} color={t.textSecondary} style={{ marginTop: 2 }} />
-                  <View style={{ flex: 1 }}>
-                    <Txt variant="caption" style={{ fontWeight: '800' }}>
-                      {tip.when}
-                    </Txt>
-                    <Txt variant="caption">{tip.text}</Txt>
-                  </View>
-                </Row>
-              ))}
-            </View>
-          ))}
       </Card>
 
       <Card>
@@ -298,6 +258,7 @@ function Metric({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
+  nutri: { borderRadius: 12, padding: Spacing.m, gap: 2 },
   page: { padding: Spacing.l, gap: Spacing.l, paddingBottom: 60 },
   code: { borderRadius: 12, padding: Spacing.m },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.s },

@@ -2,7 +2,7 @@ import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, Stack } from 'expo-router';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View, type ScrollViewInstance } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, TextInput, View, type ScrollViewInstance } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   addDays,
@@ -160,6 +160,7 @@ export default function GoalScreen() {
   // Si la navigation se recharge pendant la création, on retrouve l'écran de félicitations.
   const [created, setCreated] = useState<Celebration | null>(() => (pendingCelebration && Date.now() - pendingCelebration.at < 5 * 60_000 ? pendingCelebration : null));
   const [distTab, setDistTab] = useState<number>(10);
+  const [leaving, setLeaving] = useState(false);
 
   // Le profil peut arriver juste après l'ouverture : on reprend les valeurs et on saute l'étape « Toi ».
   const touched = useRef(false);
@@ -355,16 +356,24 @@ export default function GoalScreen() {
       pendingCelebration = null;
       const entry = getPlan(planId);
       const first = entry?.plan.sessions.find((x) => x.date >= today) ?? entry?.plan.sessions[0];
-      router.dismiss();
+      // On ferme d'abord le plein écran, puis la fenêtre de création, puis on ouvre la suite
+      // (iOS refuse de fermer une fenêtre pendant qu'une autre est affichée par-dessus).
+      setLeaving(true);
       setTimeout(() => {
-        if (to === 'session' && first) router.push({ pathname: '/session/[id]', params: { id: first.id, plan: planId } });
-        else router.push({ pathname: '/plan/[id]', params: { id: planId } });
-      }, 60);
+        router.dismiss();
+        setTimeout(() => {
+          if (to === 'session' && first) router.push({ pathname: '/session/[id]', params: { id: first.id, plan: planId } });
+          else router.push({ pathname: '/plan/[id]', params: { id: planId } });
+        }, 80);
+      }, 320);
     };
     return (
       <>
         <Stack.Screen options={{ headerShown: false, gestureEnabled: false }} />
-        <GoalCelebration title={created.title} subtitle={created.subtitle} stats={created.stats} onStart={() => leave('session')} onPlan={() => leave('plan')} />
+        {/* Plein écran par-dessus la fenêtre de création (qui, elle, n'occupe pas tout l'écran). */}
+        <Modal visible={!leaving} animationType="fade" presentationStyle="overFullScreen" transparent statusBarTranslucent onRequestClose={() => leave('plan')}>
+          <GoalCelebration title={created.title} subtitle={created.subtitle} stats={created.stats} onStart={() => leave('session')} onPlan={() => leave('plan')} />
+        </Modal>
       </>
     );
   }

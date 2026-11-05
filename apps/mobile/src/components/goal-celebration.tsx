@@ -1,7 +1,7 @@
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useMemo, useRef } from 'react';
-import { Animated, Dimensions, Easing, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Dimensions, Easing, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button, Ionicons, Txt } from '@/components/ui';
@@ -128,7 +128,11 @@ export function GoalCelebration({
         />
       ))}
 
-      <View style={[styles.content, { paddingTop: insets.top + Spacing.xl, paddingBottom: insets.bottom + Spacing.l }]}>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + Spacing.l, paddingBottom: insets.bottom + Spacing.l, minHeight: height }]}
+        showsVerticalScrollIndicator={false}
+        bounces={false}>
         <View style={styles.center}>
           {/* Fusée */}
           <Animated.View
@@ -196,21 +200,21 @@ export function GoalCelebration({
             </Txt>
           </Pressable>
         </Animated.View>
-      </View>
+      </ScrollView>
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { flex: 1, paddingHorizontal: Spacing.xl, justifyContent: 'space-between', alignItems: 'center' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: Spacing.l, width: '100%' },
-  rocketWrap: { width: 140, height: 160, alignItems: 'center' },
-  rocketCircle: { width: 124, height: 124, borderRadius: 62, backgroundColor: 'rgba(255,255,255,0.16)', borderWidth: 2, borderColor: 'rgba(255,255,255,0.45)', alignItems: 'center', justifyContent: 'center', zIndex: 2 },
-  rocket: { fontSize: 66, lineHeight: 80 },
-  flame: { position: 'absolute', top: 84, left: 14, zIndex: 3 },
+  content: { flexGrow: 1, paddingHorizontal: Spacing.xl, justifyContent: 'space-between', alignItems: 'center', gap: Spacing.l },
+  center: { alignItems: 'center', justifyContent: 'center', gap: Spacing.m, width: '100%', flexGrow: 1 },
+  rocketWrap: { width: 120, height: 124, alignItems: 'center' },
+  rocketCircle: { width: 108, height: 108, borderRadius: 54, backgroundColor: 'rgba(255,255,255,0.16)', borderWidth: 2, borderColor: 'rgba(255,255,255,0.45)', alignItems: 'center', justifyContent: 'center', zIndex: 2 },
+  rocket: { fontSize: 56, lineHeight: 68 },
+  flame: { position: 'absolute', top: 72, left: 10, zIndex: 3 },
   kicker: { fontSize: 14, fontWeight: '800', letterSpacing: 1.6, textTransform: 'uppercase' },
-  title: { fontSize: 30, lineHeight: 36, fontWeight: '800', letterSpacing: -0.8, textAlign: 'center' },
+  title: { fontSize: 27, lineHeight: 33, fontWeight: '800', letterSpacing: -0.8, textAlign: 'center' },
   rows: { width: '100%', gap: Spacing.s },
-  row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.m, backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 14, paddingVertical: 12, paddingHorizontal: Spacing.m },
+  row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.m, backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 14, paddingVertical: 10, paddingHorizontal: Spacing.m },
   rowIcon: { width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
 });

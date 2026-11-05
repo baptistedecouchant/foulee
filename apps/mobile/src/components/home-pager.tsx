@@ -3,7 +3,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Animated, Pressable, ScrollView, StyleSheet, View, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollViewInstance } from 'react-native';
 
-import { Glass } from '@/components/visuals';
 import { Radius, Spacing } from '@/constants/theme';
 
 export interface PagerPage {
@@ -18,7 +17,7 @@ const PAGE_H = 150;
 
 /**
  * Bloc d'accueil qui défile verticalement (façon widgets iOS) : chaque page est un panneau
- * Liquid Glass posé sur un fond de couleur (qui change avec le module), avec les points de navigation à droite.
+ * translucide posé sur un fond de couleur (qui change avec le module), avec les points de navigation à droite.
  */
 export function HomePager({ pages }: { pages: PagerPage[] }) {
   const [index, setIndex] = useState(0);
@@ -65,9 +64,8 @@ export function HomePager({ pages }: { pages: PagerPage[] }) {
           scrollEventThrottle={16}>
           {pages.map((p) => (
             <Pressable key={p.key} accessibilityRole={p.onPress ? 'button' : undefined} onPress={p.onPress} style={{ height: PAGE_H, paddingVertical: 2 }}>
-              <Glass clear style={styles.panel}>
-                {p.content}
-              </Glass>
+              {/* Panneau translucide fixe : lisible quel que soit le thème (le verre natif devient blanc en mode clair). */}
+              <View style={styles.panel}>{p.content}</View>
             </Pressable>
           ))}
         </ScrollView>
@@ -87,7 +85,7 @@ const styles = StyleSheet.create({
   card: { borderRadius: Radius.l, overflow: 'hidden', padding: Spacing.m, height: PAGE_H + Spacing.m * 2, justifyContent: 'center' },
   glow: { position: 'absolute', width: 220, height: 220, borderRadius: 110, right: -60, top: -90, backgroundColor: 'rgba(255,255,255,0.14)' },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.s },
-  panel: { flex: 1, padding: Spacing.m, gap: 6, borderRadius: 20, justifyContent: 'center' },
+  panel: { flex: 1, padding: Spacing.m, gap: 6, borderRadius: 20, justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.13)', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.35)' },
   dots: { gap: 6, alignItems: 'center', paddingHorizontal: 2 },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.45)' },
   dotOn: { height: 18, backgroundColor: '#fff' },
