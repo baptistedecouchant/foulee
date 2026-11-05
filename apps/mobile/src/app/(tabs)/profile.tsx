@@ -71,7 +71,7 @@ export default function ProfileScreen() {
   return (
     <ScrollView style={{ backgroundColor: t.background }} contentContainerStyle={[styles.page, { paddingTop: Spacing.l + top }]} contentInsetAdjustmentBehavior="automatic">
       {/* ---------- Carte joueur ---------- */}
-      <GradientCard colors={Gradients.night}>
+      <GradientCard colors={['#6A2BD9', '#C2338C'] as const}>
         <Row>
           <AvatarEditor name={name} size={60} />
           <View style={{ flex: 1 }}>

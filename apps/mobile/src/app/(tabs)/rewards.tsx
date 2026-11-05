@@ -1,3 +1,4 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { BADGES, ECONOMY, rcToEuro, type BadgeTier } from '@foulee/core';
@@ -66,7 +67,7 @@ export default function RewardsScreen() {
           </Txt>
           <Ionicons name="cash" size={26} color={t.goldText} />
         </Row>
-        <Txt variant="hero" color={t.goldText} style={{ fontSize: 48 }}>
+        <Txt variant="hero" color={t.goldText} style={{ fontSize: 48, lineHeight: 56 }}>
           {fmtInt(balance)} RC
         </Txt>
         <Txt color={t.goldText}>
@@ -244,9 +245,9 @@ export default function RewardsScreen() {
               const done = p >= 1;
               return (
                 <Card key={b.id} style={styles.badgeCard}>
-                  <GradientCard colors={TIER[b.tier]} style={[styles.medal, { opacity: done ? 1 : 0.35 }]}>
+                  <LinearGradient colors={TIER[b.tier]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.medal, { opacity: done ? 1 : 0.35 }]}>
                     <Ionicons name={BADGE_ICON[b.icon]} size={30} color="#fff" />
-                  </GradientCard>
+                  </LinearGradient>
                   <Txt style={{ fontWeight: '800', textAlign: 'center' }} numberOfLines={1}>
                     {b.title}
                   </Txt>

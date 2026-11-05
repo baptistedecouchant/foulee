@@ -62,11 +62,15 @@ export function Glass({ children, style, tint, dark, clear }: { children: ReactN
   );
 }
 
-/** Fond dégradé simple (cartes héros sans photo). */
+/**
+ * Bloc coloré (même style que les modules de l'accueil) : fond dégradé arrondi, halo lumineux,
+ * et contenu posé sur un panneau translucide. `style` s'applique au panneau (mise en page du contenu).
+ */
 export function GradientCard({ colors, children, style }: { colors: readonly [string, string]; children: ReactNode; style?: StyleProp<ViewStyle> }) {
   return (
-    <LinearGradient colors={colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.gradientCard, style]}>
-      {children}
+    <LinearGradient colors={colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.gradientCard}>
+      <View pointerEvents="none" style={styles.glow} />
+      <View style={[styles.gradientPanel, style]}>{children}</View>
     </LinearGradient>
   );
 }
@@ -76,5 +80,7 @@ const styles = StyleSheet.create({
   photoContent: { padding: Spacing.l, gap: Spacing.s },
   glass: { borderRadius: Radius.l, overflow: 'hidden', padding: Spacing.l, gap: Spacing.m },
   blurFallback: { backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.25)' },
-  gradientCard: { borderRadius: Radius.l, padding: Spacing.l, gap: Spacing.m, overflow: 'hidden' },
+  gradientCard: { borderRadius: Radius.l, padding: Spacing.m, overflow: 'hidden' },
+  gradientPanel: { borderRadius: 20, padding: Spacing.l, gap: Spacing.m, backgroundColor: 'rgba(255,255,255,0.13)', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.35)' },
+  glow: { position: 'absolute', width: 240, height: 240, borderRadius: 120, right: -70, top: -110, backgroundColor: 'rgba(255,255,255,0.14)' },
 });

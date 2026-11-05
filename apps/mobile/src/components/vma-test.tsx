@@ -64,7 +64,7 @@ export function VmaTest({ entry, measured }: { entry: PlanEntry; measured?: numb
         <Txt style={styles.h}>⏱️ Le test des 6 minutes</Txt>
         {[
           '🔥 15 minutes d’échauffement très facile, puis 3 accélérations.',
-          '🏃 6 minutes le plus loin possible, à une allure régulière : pars vite, mais pas en sprint.',
+          '🏃 Tempo maximum sur 6 min : le plus loin possible, à allure régulière. Pars vite, mais pas en sprint.',
           '📏 VMA = distance parcourue ÷ 100. Exemple : 1 300 m en 6 min = 13 km/h.',
           '🧊 10 minutes de retour au calme.',
         ].map((x) => (
@@ -122,5 +122,5 @@ const styles = StyleSheet.create({
   card: { borderRadius: 22, padding: Spacing.l, gap: Spacing.m, boxShadow: '0 1px 2px rgba(11,16,32,0.04), 0 6px 20px rgba(11,16,32,0.06)' },
   h: { fontSize: 17, fontWeight: '700' },
   result: { borderRadius: 16, padding: Spacing.l, alignItems: 'center', gap: 4 },
-  vma: { fontSize: 34, fontWeight: '800', letterSpacing: -0.8 },
+  vma: { fontSize: 34, lineHeight: 42, fontWeight: '800', letterSpacing: -0.8 },
 });

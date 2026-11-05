@@ -41,7 +41,7 @@ export default function AccountScreen() {
   const [y, m, d] = (profile.birthDate ?? '').split('-');
   return (
     <ScrollView ref={scrollRef} style={{ backgroundColor: t.background }} contentContainerStyle={styles.page}>
-      <GradientCard colors={Gradients.night}>
+      <GradientCard colors={['#6A2BD9', '#C2338C'] as const}>
         <Row>
           <AvatarEditor name={profile.firstName ?? 'Moi'} size={60} />
           <View style={{ flex: 1 }}>

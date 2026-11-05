@@ -122,7 +122,7 @@ function Run({ entry, session }: { entry: PlanEntry; session: PlannedSession }) 
     const activity = runner.finish();
     if (isTest) {
       // Distance courue pendant le bloc « 6 min à fond » → VMA, validée sur l'écran du plan.
-      const i = runner.steps.findIndex((st) => st.label.startsWith('Test'));
+      const i = runner.steps.findIndex((st) => st.label === 'Tempo maximum');
       const lap = activity?.laps?.[i];
       const meters = activity && lap ? distanceBetween(activity.track ?? [], lap.start, lap.end) : 0;
       setSaving(false);
@@ -607,7 +607,7 @@ const styles = StyleSheet.create({
   bottom: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: Spacing.l, paddingTop: Spacing.m, backgroundColor: 'rgba(7,11,22,0.94)' },
   runBody: { flex: 1, paddingHorizontal: Spacing.l, gap: Spacing.l, justifyContent: 'space-evenly' },
   paceBox: { borderWidth: 3, borderRadius: Radius.l, alignItems: 'center', paddingVertical: Spacing.m, backgroundColor: C.card },
-  bigPace: { fontSize: 88, fontWeight: '900', fontFamily: Fonts.rounded, fontVariant: ['tabular-nums'], letterSpacing: -2 },
+  bigPace: { fontSize: 88, lineHeight: 100, fontWeight: '900', fontFamily: Fonts.rounded, fontVariant: ['tabular-nums'], letterSpacing: -2 },
   big: { color: '#fff', fontSize: 26, fontWeight: '900', fontVariant: ['tabular-nums'] },
   unit: { color: C.muted, fontSize: 14, fontWeight: '700' },
   message: { flexDirection: 'row', gap: 8, alignItems: 'center', backgroundColor: C.card, borderRadius: Radius.m, padding: Spacing.m },

@@ -2,7 +2,7 @@ import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, Stack } from 'expo-router';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, TextInput, View, type ScrollViewInstance } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, TextInput, View, type ScrollViewInstance } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   addDays,
@@ -29,7 +29,7 @@ import {
   type SessionsPerWeek,
 } from '@foulee/core';
 
-import { GoalCelebration } from '@/components/goal-celebration';
+import { getPendingCelebration, setPendingCelebration, type GoalCelebrationData } from '@/lib/celebration-store';
 import { CalendarPicker, ClockPicker, DurationPicker, NumberPicker } from '@/components/pickers';
 import { Button, Ionicons, ProgressBar, Txt, type IconName } from '@/components/ui';
 import { PhotoCard } from '@/components/visuals';
@@ -105,16 +105,7 @@ type When = 'race' | 'date';
 type Step = 'toi' | 'perf' | 'course' | 'rythme' | 'objectif' | 'recap';
 const STEPS: Step[] = ['toi', 'perf', 'course', 'rythme', 'objectif', 'recap'];
 
-interface Celebration {
-  id: string;
-  at: number;
-  start: string;
-  title: string;
-  subtitle: string;
-  stats: Array<{ icon: 'calendar' | 'repeat' | 'flag' | 'speedometer'; label: string }>;
-}
-/** Survit à un éventuel rechargement de l'écran pendant la création du plan. */
-let pendingCelebration: Celebration | null = null;
+
 
 export default function GoalScreen() {
   const t = useTheme();
@@ -122,7 +113,7 @@ export default function GoalScreen() {
   const { createPlan, plans, runs, getPlan } = useStore();
   const { athlete: saved, save: saveAthlete } = useAthlete();
   const today = todayIso();
-  const [start, setStart] = useState(() => pendingCelebration?.start ?? suggestedStartDate(today));
+  const [start, setStart] = useState(() => suggestedStartDate(today));
   const [editStart, setEditStart] = useState(false);
   const scroll = useRef<ScrollViewInstance>(null);
   const recent = useMemo(() => runs.filter((r) => r.distanceKm >= 3 && r.durationSec > 600).slice(0, 5), [runs]);
@@ -157,10 +148,14 @@ export default function GoalScreen() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tried, setTried] = useState(false);
-  // Si la navigation se recharge pendant la création, on retrouve l'écran de félicitations.
-  const [created, setCreated] = useState<Celebration | null>(() => (pendingCelebration && Date.now() - pendingCelebration.at < 5 * 60_000 ? pendingCelebration : null));
+  // Si l'écran se recharge juste après la création, on file directement aux félicitations.
+  useEffect(() => {
+    if (getPendingCelebration()) {
+      router.dismiss();
+      setTimeout(() => router.push('/celebrate'), 80);
+    }
+  }, []);
   const [distTab, setDistTab] = useState<number>(10);
-  const [leaving, setLeaving] = useState(false);
 
   // Le profil peut arriver juste après l'ouverture : on reprend les valeurs et on saute l'étape « Toi ».
   const touched = useRef(false);
@@ -318,7 +313,7 @@ export default function GoalScreen() {
     try {
       const id = await createPlan(request);
       const n = request.sessionsPerWeek;
-      const c: Celebration = {
+      const c: GoalCelebrationData = {
         id,
         at: Date.now(),
         start,
@@ -334,9 +329,11 @@ export default function GoalScreen() {
           { icon: 'flag' as const, label: `Début du plan : ${formatDateFr(start, { weekday: 'long', day: 'numeric', month: 'long' })}` },
         ],
       };
-      pendingCelebration = c;
+      setPendingCelebration(c);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      setCreated(c);
+      // Les félicitations s'ouvrent en plein écran, une fois la fenêtre de création fermée.
+      router.dismiss();
+      setTimeout(() => router.push('/celebrate'), 80);
     } catch (e) {
       const code = String((e as { message?: string })?.message ?? '');
       setError(code.includes('too_many_active_plans') ? `Tu as déjà ${MAX_ACTIVE_PLANS} objectifs en cours.` : 'Le plan n’a pas pu être créé. Vérifie ta connexion et réessaie.');
@@ -348,35 +345,6 @@ export default function GoalScreen() {
   const full = plans.length >= MAX_ACTIVE_PLANS;
   const isLast = step === STEPS.length - 1;
   const labels: Record<Step, string> = { toi: 'Toi', perf: refSource === 'estimate' ? 'Ton niveau' : 'Dernière perf', course: 'Ta course', rythme: 'Ton rythme', objectif: 'Ton objectif', recap: 'Récap' };
-
-  // ---------- Félicitations ----------
-  if (created) {
-    const leave = (to: 'session' | 'plan') => {
-      const planId = created.id;
-      pendingCelebration = null;
-      const entry = getPlan(planId);
-      const first = entry?.plan.sessions.find((x) => x.date >= today) ?? entry?.plan.sessions[0];
-      // On ferme d'abord le plein écran, puis la fenêtre de création, puis on ouvre la suite
-      // (iOS refuse de fermer une fenêtre pendant qu'une autre est affichée par-dessus).
-      setLeaving(true);
-      setTimeout(() => {
-        router.dismiss();
-        setTimeout(() => {
-          if (to === 'session' && first) router.push({ pathname: '/session/[id]', params: { id: first.id, plan: planId } });
-          else router.push({ pathname: '/plan/[id]', params: { id: planId } });
-        }, 80);
-      }, 320);
-    };
-    return (
-      <>
-        <Stack.Screen options={{ headerShown: false, gestureEnabled: false }} />
-        {/* Plein écran par-dessus la fenêtre de création (qui, elle, n'occupe pas tout l'écran). */}
-        <Modal visible={!leaving} animationType="fade" presentationStyle="overFullScreen" transparent statusBarTranslucent onRequestClose={() => leave('plan')}>
-          <GoalCelebration title={created.title} subtitle={created.subtitle} stats={created.stats} onStart={() => leave('session')} onPlan={() => leave('plan')} />
-        </Modal>
-      </>
-    );
-  }
 
   // ---------- Rendu ----------
   const s = STEPS[step];

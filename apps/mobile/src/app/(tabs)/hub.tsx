@@ -58,7 +58,7 @@ export default function HubScreen() {
       )}
 
       {/* ---------- Mon profil ---------- */}
-      <GradientCard colors={Gradients.night}>
+      <GradientCard colors={['#3A4BFF', '#7B3FF2'] as const}>
         {o.me.name ? (
           <Row style={{ gap: Spacing.m }}>
             <Avatar name={o.me.name ?? "Moi"} color="#3A4BFF" size={52} uri={myAvatar} />

@@ -74,7 +74,7 @@ export function vmaTestSession(plan: Plan, date: string): PlannedSession {
     { kind: 'run', zone: 'ef', label: 'Échauffement', durationSec: 900, pace: r(1.22, 1.32) },
     { kind: 'repeat', times: 3, steps: [{ kind: 'run', zone: 'fart', label: 'Accélération', durationSec: 20, pace: r(0.92, 0.98) }, { kind: 'run', zone: 'rec', label: 'Récupération', durationSec: 60, pace: r(1.45, 1.7) }] },
     { kind: 'run', zone: 'rec', label: 'Récupération', durationSec: 120, pace: r(1.45, 1.7) },
-    { kind: 'run', zone: 'vma', label: 'Test : 6 min à fond', durationSec: VMA_TEST_SEC, pace: r(0.85, 0.95) },
+    { kind: 'run', zone: 'vma', label: 'Tempo maximum', durationSec: VMA_TEST_SEC, pace: r(0.85, 0.95) },
     { kind: 'run', zone: 'ef', label: 'Retour au calme', durationSec: 600, pace: r(1.3, 1.45) },
   ];
   const m = measureSteps(steps);

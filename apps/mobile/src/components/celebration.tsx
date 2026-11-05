@@ -96,10 +96,10 @@ const styles = StyleSheet.create({
   confetti: { position: 'absolute', top: 0, width: 10, height: 16, borderRadius: 3 },
   card: { borderRadius: Radius.l, padding: Spacing.xl, gap: Spacing.l, alignItems: 'stretch' },
   iconWrap: { alignItems: 'center' },
-  title: { color: '#fff', fontSize: 30, fontWeight: '900', textAlign: 'center', letterSpacing: -0.5 },
+  title: { color: '#fff', fontSize: 30, lineHeight: 36, fontWeight: '900', textAlign: 'center', letterSpacing: -0.5 },
   subtitle: { color: 'rgba(255,255,255,0.85)', fontSize: 16, textAlign: 'center' },
   rewards: { flexDirection: 'row', justifyContent: 'center', gap: Spacing.xl },
   reward: { alignItems: 'center', gap: 2 },
-  rewardValue: { color: '#fff', fontSize: 34, fontWeight: '900', fontVariant: ['tabular-nums'] },
+  rewardValue: { color: '#fff', fontSize: 34, lineHeight: 42, fontWeight: '900', fontVariant: ['tabular-nums'] },
   rewardLabel: { color: 'rgba(255,255,255,0.8)', fontSize: 13, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
 });

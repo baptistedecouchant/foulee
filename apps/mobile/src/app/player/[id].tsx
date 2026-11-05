@@ -37,7 +37,7 @@ export default function PlayerScreen() {
   return (
     <ScrollView style={{ backgroundColor: t.background }} contentContainerStyle={styles.page}>
       <Stack.Screen options={{ title: p.name }} />
-      <GradientCard colors={Gradients.night}>
+      <GradientCard colors={['#0E8F86', '#1E5FD8'] as const}>
         <Row style={{ gap: Spacing.m }}>
           <Avatar name={p.name} color={p.color} size={64} uri={p.avatarUrl} />
           <View style={{ flex: 1 }}>

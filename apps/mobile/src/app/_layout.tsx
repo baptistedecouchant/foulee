@@ -39,6 +39,7 @@ function Navigator() {
         <Stack.Screen name="coach" options={{ title: 'Coach IA' }} />
         <Stack.Screen name="shoes" options={{ title: 'Mes chaussures' }} />
         <Stack.Screen name="runs" options={{ title: 'Mes dernières courses' }} />
+        <Stack.Screen name="celebrate" options={{ presentation: 'fullScreenModal', headerShown: false, gestureEnabled: false, animation: 'fade' }} />
         <Stack.Screen name="goal" options={{ presentation: 'modal', title: 'Nouvel objectif' }} />
         <Stack.Screen name="plan/[id]" options={{ title: '' }} />
         <Stack.Screen name="session/[id]" options={{ title: '' }} />

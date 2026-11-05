@@ -236,9 +236,9 @@ export function SectionTitle({ children, action }: { children: string; action?: 
 }
 
 const styles = StyleSheet.create({
-  hero: { fontSize: 38, fontWeight: '800', letterSpacing: -1.2, fontFamily: Fonts.rounded, fontVariant: ['tabular-nums'] },
-  display: { fontSize: 28, fontWeight: '800', letterSpacing: -0.7, fontFamily: Fonts.rounded },
-  title: { fontSize: 19, fontWeight: '700', letterSpacing: -0.3, fontFamily: Fonts.rounded },
+  hero: { fontSize: 38, lineHeight: 46, fontWeight: '800', letterSpacing: -1.2, fontFamily: Fonts.rounded, fontVariant: ['tabular-nums'] },
+  display: { fontSize: 28, lineHeight: 34, fontWeight: '800', letterSpacing: -0.7, fontFamily: Fonts.rounded },
+  title: { fontSize: 19, lineHeight: 25, fontWeight: '700', letterSpacing: -0.3, fontFamily: Fonts.rounded },
   body: { fontSize: 15, lineHeight: 21 },
   label: { fontSize: 12, fontWeight: '600', letterSpacing: 0.6, textTransform: 'uppercase' },
   caption: { fontSize: 13, lineHeight: 18 },
