@@ -37,6 +37,8 @@ jobs:
           tpl2 = d.get('mailer_templates_recovery_content') or ''
           print('Modèle « Reset password » contient le code {{ .Token }} :', '{{ .Token }}' in tpl2)
           print('Durée de validité du code (s) :', d.get('mailer_otp_exp'))
+          allow = [u for u in (d.get('uri_allow_list') or '').split(',') if u]
+          print('Adresses de retour autorisées :', ', '.join(u for u in allow if u.startswith(('exp:', 'foulee:'))) or 'AUCUNE (exp://** et foulee://** manquent)')
           "
 
       - name: Redirection vers Google

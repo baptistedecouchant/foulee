@@ -1,10 +1,32 @@
-"""Configure les e-mails de connexion Supabase (API de gestion) :
+"""Configure la connexion Supabase (API de gestion) :
+- adresses de retour autorisées après Google / Apple (exp://**, foulee://**) ;
 - modèles en français avec le code à 6 chiffres que l'app demande ;
 - serveur d'envoi (SMTP) si les secrets SMTP_* existent, avec une limite d'envoi adaptée.
 Aucune valeur secrète n'est affichée."""
 import json, os, sys, urllib.request
 
 ref, token = os.environ['PROJECT_REF'], os.environ['SUPABASE_ACCESS_TOKEN']
+
+API = f'https://api.supabase.com/v1/projects/{ref}/config/auth'
+HEADERS = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
+
+
+def call(method, body=None):
+    req = urllib.request.Request(API, data=json.dumps(body).encode() if body else None, method=method, headers=HEADERS)
+    with urllib.request.urlopen(req) as r:
+        return json.load(r)
+
+
+# ---------- Adresses de retour après Google / Apple (Expo Go et app installée) ----------
+REDIRECTS = ['exp://**', 'foulee://**']
+current = call('GET')
+allowed = [u.strip() for u in (current.get('uri_allow_list') or '').split(',') if u.strip()]
+missing = [u for u in REDIRECTS if u not in allowed]
+if missing:
+    call('PATCH', {'uri_allow_list': ','.join(allowed + missing)})
+    print('Adresses de retour ajoutées :', ', '.join(missing))
+else:
+    print('Adresses de retour déjà présentes :', ', '.join(REDIRECTS))
 
 def box(title, intro, code_label):
     return f"""<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#0B1020">
@@ -44,15 +66,9 @@ else:
     print('Ajoute SMTP_HOST, SMTP_USER, SMTP_PASS et SMTP_SENDER dans GitHub pour envoyer les codes à tout le monde.')
     sys.exit(0)
 
-req = urllib.request.Request(
-    f'https://api.supabase.com/v1/projects/{ref}/config/auth',
-    data=json.dumps(cfg).encode(),
-    method='PATCH',
-    headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
-)
 try:
-    with urllib.request.urlopen(req) as r:
-        d = json.load(r)
+    d = call('PATCH', cfg)
+    if d:
         print('Modèles avec code à 6 chiffres :', '{{ .Token }}' in (d.get('mailer_templates_confirmation_content') or ''))
         print('Limite d’e-mails par heure :', d.get('rate_limit_email_sent'))
 except urllib.error.HTTPError as e:

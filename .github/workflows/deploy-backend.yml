@@ -68,7 +68,7 @@ jobs:
           supabase secrets set --env-file secrets.env --project-ref "$PROJECT_REF" --yes
           rm secrets.env
 
-      - name: E-mails de connexion (code à 6 chiffres, serveur d'envoi)
+      - name: Connexion (adresses de retour, e-mails avec code à 6 chiffres)
         env:
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
