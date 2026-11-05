@@ -14,3 +14,5 @@ export * from './challenges.ts';
 export * from './hub.ts';
 export * from './economy.ts';
 export * from './tips.ts';
+export * from './shoes.ts';
+export * from './races.ts';

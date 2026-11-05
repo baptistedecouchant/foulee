@@ -609,3 +609,61 @@ describe('saisie du temps visé', () => {
     for (const bad of ['', 'abc', '45:75', '1h75', '1:2:3:4', ':']) expect(parseGoalTime(bad, 10)).toBeNull();
   });
 });
+
+import { assignRuns, raceWeekGuide, RACE_CALENDAR, searchRaces, shoeWear, normalizeClockTime, SHOE_CATALOG, type RunLog, type Shoe } from '../src/index.ts';
+
+describe('chaussures', () => {
+  const shoe: Shoe = { id: 'a', brand: 'Nike', model: 'Pegasus', lifeKm: 700, startKm: 100, since: '2026-11-01' };
+  const runs: RunLog[] = [
+    { id: 'r0', date: '2026-10-30', distanceKm: 8, durationSec: 2400, source: 'app' },
+    { id: 'r1', date: '2026-11-02', distanceKm: 10, durationSec: 3000, source: 'app' },
+    { id: 'r2', date: '2026-11-04', distanceKm: 12.4, durationSec: 3800, source: 'strava' },
+  ];
+  it('attribue les nouvelles courses à la paire par défaut, sans toucher l’historique', () => {
+    const a = assignRuns(runs, {}, [shoe], 'a');
+    expect(a).toEqual({ r1: 'a', r2: 'a' });
+    expect(assignRuns(runs, a, [shoe, { ...shoe, id: 'b' }], 'b')).toBe(a);
+  });
+  it('calcule les km et l’état', () => {
+    const w = shoeWear(shoe, runs, { r1: 'a', r2: 'a' });
+    expect(w.km).toBe(122.4);
+    expect(w.state).toBe('bonne');
+    expect(shoeWear({ ...shoe, startKm: 650 }, runs, { r1: 'a', r2: 'a' }).state).toBe('remplacer');
+    expect(shoeWear({ ...shoe, startKm: 700 }, runs, {}).state).toBe('usee');
+  });
+  it('catalogue : toutes les marques, des durées plausibles', () => {
+    for (const b of ['Nike', 'Adidas', 'Puma', 'Asics', 'Kiprun', 'Salomon', 'Brooks', 'On']) expect(SHOE_CATALOG.some((m) => m.brand === b)).toBe(true);
+    expect(SHOE_CATALOG.every((m) => m.lifeKm >= 300 && m.lifeKm <= 900)).toBe(true);
+  });
+});
+
+describe('calendrier des courses', () => {
+  it('cherche sans accents, par distance, seulement à venir', () => {
+    const r = searchRaces(RACE_CALENDAR, { query: 'tour eiffel', fromIso: '2026-11-05' });
+    expect(r[0].name).toContain('Tour Eiffel');
+    expect(searchRaces(RACE_CALENDAR, { query: 'elysees', fromIso: '2026-11-05' }).length).toBe(1);
+    expect(searchRaces(RACE_CALENDAR, { fromIso: '2026-11-05', distanceKm: 21.1 }).every((e) => e.distances.some((d) => d > 21))).toBe(true);
+    expect(searchRaces(RACE_CALENDAR, { fromIso: '2030-01-01' })).toEqual([]);
+  });
+  it('lit une heure de départ', () => {
+    expect(normalizeClockTime('8h')).toBe('08:00');
+    expect(normalizeClockTime('8:30')).toBe('08:30');
+    expect(normalizeClockTime('25:00')).toBeNull();
+  });
+});
+
+describe('semaine de course', () => {
+  it('marathon : charge glucidique dosée au poids, gels, horaires calés sur le départ', () => {
+    const g = raceWeekGuide({ distanceKm: 42.195, expectedSec: 4 * 3600, startTime: '08:30', weightKg: 70 });
+    const txt = JSON.stringify(g);
+    expect(txt).toContain('J-3');
+    expect(txt).toContain('560 g');
+    expect(txt).toContain('5 h 30'); // petit-déjeuner 3 h avant
+    expect(txt).toMatch(/gels/);
+  });
+  it('10 km : pas de charge, pas de gel', () => {
+    const txt = JSON.stringify(raceWeekGuide({ distanceKm: 10, expectedSec: 3000 }));
+    expect(txt).toContain('Pas besoin de charge');
+    expect(txt).not.toContain('gel toutes');
+  });
+});

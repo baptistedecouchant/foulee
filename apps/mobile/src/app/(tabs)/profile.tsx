@@ -1,9 +1,10 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
-import { BADGE_XP, BADGES, daysBetween, LEVEL_TITLES, LOGIN_XP, xpForLevel } from '@foulee/core';
+import { BADGE_XP, BADGES, daysBetween, formatTime, LEVEL_TITLES, LOGIN_XP, xpForLevel } from '@foulee/core';
 
 import { Button, Card, Chip, Ionicons, LevelBadge, ProgressBar, Row, SectionTitle, Txt, type IconName } from '@/components/ui';
+import { WearBar } from '@/components/gear';
 import { GradientCard } from '@/components/visuals';
 import { Gradients, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -24,7 +25,8 @@ export default function ProfileScreen() {
   const t = useTheme();
   const top = useTopInset();
   const { profile } = useSession();
-  const { plans, stats, level, loginDays } = useStore();
+  const { plans, stats, level, loginDays, runs, shoes } = useStore();
+  const mainShoe = shoes.find((x) => x.isDefault) ?? shoes.find((x) => !x.shoe.retired);
   const { athlete, save } = useAthlete();
   const today = todayIso();
 
@@ -181,6 +183,73 @@ export default function ProfileScreen() {
             </Row>
           ))}
         </View>
+      </Card>
+
+      {/* ---------- Chaussures ---------- */}
+      <SectionTitle action={<Button kind="ghost" small label="Gérer" onPress={() => router.push('/shoes')} />}>Mes chaussures</SectionTitle>
+      <Pressable accessibilityRole="button" onPress={() => router.push('/shoes')}>
+        <Card>
+          {mainShoe ? (
+            <>
+              <Row style={{ justifyContent: 'space-between' }}>
+                <View style={{ flex: 1 }}>
+                  <Txt variant="caption" muted>
+                    {mainShoe.isDefault ? 'Paire par défaut' : 'Paire'} · {mainShoe.shoe.brand}
+                  </Txt>
+                  <Txt style={{ fontWeight: '700', fontSize: 17 }}>{mainShoe.shoe.model}</Txt>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={t.textSecondary} />
+              </Row>
+              <WearBar wear={mainShoe.wear} lifeKm={mainShoe.shoe.lifeKm} />
+              {shoes.filter((x) => !x.shoe.retired).length > 1 && (
+                <Txt variant="caption" muted>
+                  + {shoes.filter((x) => !x.shoe.retired).length - 1} autre{shoes.filter((x) => !x.shoe.retired).length > 2 ? 's' : ''} paire
+                  {shoes.filter((x) => !x.shoe.retired).length > 2 ? 's' : ''}
+                </Txt>
+              )}
+            </>
+          ) : (
+            <Row>
+              <Ionicons name="footsteps-outline" size={22} color={t.accent} />
+              <View style={{ flex: 1 }}>
+                <Txt style={{ fontWeight: '600' }}>Ajoute ta paire</Txt>
+                <Txt variant="caption" muted>
+                  Les km de chaque course s’ajoutent automatiquement, et Foulée te prévient quand elle est usée.
+                </Txt>
+              </View>
+              <Ionicons name="add-circle" size={24} color={t.accent} />
+            </Row>
+          )}
+        </Card>
+      </Pressable>
+
+      {/* ---------- Dernières courses ---------- */}
+      <SectionTitle action={runs.length ? <Button kind="ghost" small label="Tout voir" onPress={() => router.push('/runs')} /> : undefined}>Mes dernières courses</SectionTitle>
+      <Card style={{ gap: 0, paddingVertical: Spacing.s }}>
+        {runs.length === 0 ? (
+          <Txt variant="caption" muted style={{ paddingVertical: Spacing.s }}>
+            Tes courses validées et importées (Strava, Garmin, Apple Santé) apparaîtront ici.
+          </Txt>
+        ) : (
+          runs.slice(0, 3).map((r, i) => (
+            <Pressable
+              key={r.id}
+              accessibilityRole="button"
+              onPress={() => router.push('/runs')}
+              style={[styles.link, i < Math.min(3, runs.length) - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.line }]}>
+              <View style={{ flex: 1 }}>
+                <Txt style={{ fontWeight: '600' }}>
+                  {String(r.distanceKm).replace('.', ',')} km · {formatTime(r.durationSec)}
+                </Txt>
+                <Txt variant="caption" muted>
+                  {formatDateFr(r.date, { weekday: 'short', day: 'numeric', month: 'short' })}
+                  {r.title ? ` · ${r.title}` : ''}
+                </Txt>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={t.textSecondary} />
+            </Pressable>
+          ))
+        )}
       </Card>
 
       {/* ---------- Badges ---------- */}

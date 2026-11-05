@@ -1,5 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
-import { CHALLENGES, unitOf, type HubChallenge } from '@foulee/core';
+import { CHALLENGES, daysBetween, unitOf, type FriendGoal, type HubChallenge } from '@foulee/core';
 
 import { Button, Card, Chip, Ionicons, ProgressBar, Row, Txt } from '@/components/ui';
 import { Gradients, Spacing } from '@/constants/theme';
@@ -107,3 +107,31 @@ const styles = StyleSheet.create({
   avatar: { alignItems: 'center', justifyContent: 'center' },
   icon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: Spacing.xs },
 });
+
+/** Objectif d'un ami : compte à rebours et régularité (séances faites / prévues à ce jour). */
+export function FriendGoalRow({ g, compact }: { g: FriendGoal; compact?: boolean }) {
+  const t = useTheme();
+  const today = new Date().toISOString().slice(0, 10);
+  const left = daysBetween(today, g.eventDate);
+  const onTrack = g.due === 0 || g.done / g.due >= 0.8;
+  return (
+    <View style={{ gap: 4 }}>
+      <Row style={{ justifyContent: 'space-between' }}>
+        <Row style={{ flex: 1, gap: 6 }}>
+          <Ionicons name="flag" size={13} color={t.accent} />
+          <Txt variant="caption" style={{ fontWeight: '600', flexShrink: 1 }} numberOfLines={1}>
+            {g.title}
+          </Txt>
+        </Row>
+        <Txt variant="caption" muted>
+          {left > 0 ? `J-${left}` : left === 0 ? 'Jour J !' : 'Terminé'}
+        </Txt>
+      </Row>
+      <ProgressBar value={g.total ? g.done / g.total : 0} height={compact ? 4 : 6} colors={onTrack ? Gradients.xp : Gradients.flame} />
+      <Txt variant="caption" muted>
+        {g.done} séance{g.done > 1 ? 's' : ''} sur {g.total}
+        {g.due > 0 ? (onTrack ? ' · dans les temps' : ` · ${g.due - g.done} en retard`) : ''}
+      </Txt>
+    </View>
+  );
+}

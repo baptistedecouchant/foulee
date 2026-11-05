@@ -3,7 +3,7 @@
 // VÉRIFIÉES par l'anti-triche uniquement (et jamais visibles par des non-amis).
 
 import { adminClient, handle, HttpError, json, requireUser } from '../_shared/supabase.ts';
-import { challengeValue, CHALLENGES, leaderboard, periodStats, type HubChallenge, type HubConversation, type HubOverview, type RunRecord } from '../_shared/core/index.ts';
+import { challengeValue, CHALLENGES, distanceLabel, formatTime, leaderboard, periodStats, type FriendGoal, type HubChallenge, type HubConversation, type HubOverview, type Plan, type RunRecord } from '../_shared/core/index.ts';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 const DAY = 86_400_000;
@@ -153,6 +153,36 @@ async function runsOf(db: SupabaseClient, users: string[], since: number): Promi
   return out;
 }
 
+/** Objectifs en cours des amis qui acceptent de les partager, avec leur avancement. */
+async function friendGoals(db: SupabaseClient, users: string[]): Promise<Map<string, FriendGoal[]>> {
+  const out = new Map<string, FriendGoal[]>();
+  if (!users.length) return out;
+  const { data: sharing } = await db.from('profiles').select('id').in('id', users).eq('share_goals', true);
+  const ids = (sharing ?? []).map((p) => p.id);
+  if (!ids.length) return out;
+  const { data: plans } = await db.from('plans').select('id, user_id, plan').in('user_id', ids).eq('status', 'active');
+  const planIds = (plans ?? []).map((p) => p.id);
+  const { data: vals } = planIds.length
+    ? await db.from('session_validations').select('plan_id, session_id, status').in('plan_id', planIds).in('status', ['validee', 'partielle'])
+    : { data: [] };
+  const today = new Date().toISOString().slice(0, 10);
+  for (const row of plans ?? []) {
+    const plan = row.plan as Plan;
+    const g = plan.request.goal;
+    const done = new Set((vals ?? []).filter((v) => v.plan_id === row.id).map((v) => v.session_id));
+    const title = g.race?.name ?? (g.mode === 'chrono' && g.targetTimeSec ? `${distanceLabel(g.distanceKm)} en ${formatTime(g.targetTimeSec)}` : `Finir : ${distanceLabel(g.distanceKm)}`);
+    const goal: FriendGoal = {
+      title: g.race?.name && g.mode === 'chrono' && g.targetTimeSec ? `${title} · ${formatTime(g.targetTimeSec)}` : title,
+      eventDate: g.eventDate,
+      done: plan.sessions.filter((s) => done.has(s.id)).length,
+      due: plan.sessions.filter((s) => s.date <= today).length,
+      total: plan.sessions.length,
+    };
+    out.set(row.user_id, [...(out.get(row.user_id) ?? []), goal]);
+  }
+  return out;
+}
+
 async function overview(db: SupabaseClient, me: string): Promise<HubOverview> {
   const now = Date.now();
   const { data: profile } = await db.from('profiles').select('id, display_name, friend_code, city, avatar_color').eq('id', me).single();
@@ -212,6 +242,7 @@ async function overview(db: SupabaseClient, me: string): Promise<HubOverview> {
     });
   }
 
+  const goals = await friendGoals(db, acceptedIds);
   const card = (id: string) => {
     const p = profiles?.find((x) => x.id === id);
     const stats = periodStats(runs.get(id) ?? [], now);
@@ -222,6 +253,7 @@ async function overview(db: SupabaseClient, me: string): Promise<HubOverview> {
       color: p?.avatar_color ?? '#3A4BFF',
       ...stats,
       challenges: challenges.filter((c) => !c.finished && c.standings.some((s) => s.userId === id)).map((c) => c.templateId),
+      goals: goals.get(id) ?? [],
     };
   };
 

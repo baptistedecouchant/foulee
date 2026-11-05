@@ -10,6 +10,8 @@ import { useTheme } from '@/hooks/use-theme';
 import { goalTitle, planProgress, SESSION_ICON } from '@/lib/labels';
 import { formatDateFr, todayIso, useStore, type Enrichment, type PlanEntry } from '@/lib/store';
 import { callFunction, isDemo } from '@/lib/supabase';
+import { RaceWeek } from '@/components/race-week';
+import { useAthlete } from '@/lib/athlete';
 
 const PHASE_LABEL: Record<Phase, string> = { base: 'Fondations', dev: 'Développement', spe: 'Spécifique', taper: 'Affûtage' };
 
@@ -19,6 +21,8 @@ export default function PlanScreen() {
   const { getPlan, removePlan, setEnrichment } = useStore();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [enriching, setEnriching] = useState(false);
+  const [showRaceWeek, setShowRaceWeek] = useState(false);
+  const { athlete } = useAthlete();
   const [enrichError, setEnrichError] = useState<string | null>(null);
 
   const enrich = async () => {
@@ -84,6 +88,19 @@ export default function PlanScreen() {
         </View>
         <ProgressBar value={pr.ratio} height={8} track="rgba(255,255,255,0.25)" colors={Gradients.gold} />
       </PhotoCard>
+
+      {daysLeft >= 0 && daysLeft <= 7 ? (
+        <RaceWeek plan={plan} daysLeft={daysLeft} weightKg={athlete.weightKg} />
+      ) : daysLeft > 7 ? (
+        showRaceWeek ? (
+          <>
+            <RaceWeek plan={plan} daysLeft={daysLeft} weightKg={athlete.weightKg} />
+            <Button kind="ghost" small label="Masquer" onPress={() => setShowRaceWeek(false)} />
+          </>
+        ) : (
+          <Button kind="secondary" small icon="flag" label="Aperçu de ta semaine de course" onPress={() => setShowRaceWeek(true)} />
+        )
+      ) : null}
 
       {entry.enrichment ? (
         <GradientCard colors={Gradients.energy}>

@@ -37,6 +37,8 @@ function Navigator() {
       <Stack screenOptions={{ headerBackTitle: 'Retour', headerTintColor: c.accent, headerShadowVisible: false, headerTransparent: false }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="coach" options={{ title: 'Coach IA' }} />
+        <Stack.Screen name="shoes" options={{ title: 'Mes chaussures' }} />
+        <Stack.Screen name="runs" options={{ title: 'Mes dernières courses' }} />
         <Stack.Screen name="goal" options={{ presentation: 'modal', title: 'Nouvel objectif' }} />
         <Stack.Screen name="plan/[id]" options={{ title: '' }} />
         <Stack.Screen name="session/[id]" options={{ title: '' }} />

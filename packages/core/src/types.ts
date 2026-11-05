@@ -15,6 +15,8 @@ export interface Goal {
   targetTimeSec?: number;
   /** Date du jour J (AAAA-MM-JJ). */
   eventDate: string;
+  /** Course officielle visée (facultatif) : nom, ville, heure de départ « HH:MM ». */
+  race?: { name: string; city?: string; startTime?: string };
 }
 
 /** Niveau actuel : un chrono récent, ou une estimation déclarative. */

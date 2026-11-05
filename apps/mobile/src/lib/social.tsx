@@ -59,7 +59,8 @@ interface DemoState {
   messages: Record<string, HubMessage[]>;
 }
 
-const DEMO_KEY = 'foulee/social-demo/v1';
+const DEMO_KEY = 'foulee/social-demo/v2';
+const inDays = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
 
 function seedDemo(now: number): DemoState {
   const p = (id: string, name: string, city: string, color: string, km7: number, km30: number, runs30: number) => ({
@@ -77,9 +78,9 @@ function seedDemo(now: number): DemoState {
     name: null,
     city: null,
     friends: [
-      p('demo-lea', 'Léa', 'Lyon', '#FF3D6E', 24.6, 96.2, 14),
-      p('demo-karim', 'Karim', 'Paris', '#16C784', 31.2, 118.5, 17),
-      p('demo-sophie', 'Sophie', 'Nantes', '#7B3FF2', 12.4, 52.8, 9),
+      { ...p('demo-lea', 'Léa', 'Lyon', '#FF3D6E', 24.6, 96.2, 14), goals: [{ title: 'Semi-marathon en 1:55:00', eventDate: inDays(53), done: 14, due: 15, total: 32 }] },
+      { ...p('demo-karim', 'Karim', 'Paris', '#16C784', 31.2, 118.5, 17), goals: [{ title: '10 km de la Tour Eiffel · 42:30', eventDate: '2026-12-06', done: 11, due: 12, total: 16 }] },
+      { ...p('demo-sophie', 'Sophie', 'Nantes', '#7B3FF2', 12.4, 52.8, 9), goals: [{ title: 'Finir : 10 km', eventDate: inDays(40), done: 4, due: 7, total: 18 }] },
     ],
     incoming: [{ id: 'demo-thomas', name: 'Thomas' }],
     challenges: [

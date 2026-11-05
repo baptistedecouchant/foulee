@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, Switch, View } from 'react-native';
 
 import { Button, Card, Chip, Ionicons, Row, Txt } from '@/components/ui';
 import { GradientCard } from '@/components/visuals';
 import { Gradients, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { ageOf, signOut } from '@/lib/auth';
+import { ageOf, setShareGoals, signOut } from '@/lib/auth';
 import { useSession } from '@/lib/session';
 import { isDemo } from '@/lib/supabase';
 
@@ -17,8 +17,9 @@ const PROVIDER_LABEL: Record<string, { label: string; icon: 'logo-apple' | 'logo
 
 export default function AccountScreen() {
   const t = useTheme();
-  const { profile } = useSession();
+  const { profile, reload } = useSession();
   const [confirm, setConfirm] = useState(false);
+  const [share, setShare] = useState<boolean | null>(null);
 
   if (isDemo || !profile) {
     return (
@@ -67,6 +68,27 @@ export default function AccountScreen() {
         <Row style={{ justifyContent: 'space-between' }}>
           <Txt muted>Données d’activité et de santé</Txt>
           <Chip tone={profile.healthConsent ? 'ok' : 'bad'} icon={profile.healthConsent ? 'checkmark' : 'close'} label={profile.healthConsent ? 'Autorisées' : 'Non'} />
+        </Row>
+      </Card>
+
+      <Card>
+        <Row style={{ justifyContent: 'space-between' }}>
+          <View style={{ flex: 1, gap: 2 }}>
+            <Txt style={{ fontWeight: '600' }}>Partager mes objectifs avec mes amis</Txt>
+            <Txt variant="caption" muted>
+              Tes amis voient ton objectif, sa date et le nombre de séances faites. Jamais tes données de santé.
+            </Txt>
+          </View>
+          <Switch
+            accessibilityLabel="Partager mes objectifs avec mes amis"
+            value={share ?? profile.shareGoals}
+            onValueChange={(v) => {
+              setShare(v);
+              setShareGoals(v)
+                .then(reload)
+                .catch(() => setShare(!v));
+            }}
+          />
         </Row>
       </Card>
 

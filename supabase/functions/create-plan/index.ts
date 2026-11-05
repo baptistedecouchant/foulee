@@ -3,7 +3,7 @@
 // "facile" avec des séances gonflées en points.
 
 import { adminClient, handle, HttpError, json, requireUser } from '../_shared/supabase.ts';
-import { assessGoal, buildPlan, type Athlete, type PlanRequest } from '../_shared/core/index.ts';
+import { assessGoal, buildPlan, normalizeClockTime, type Athlete, type PlanRequest } from '../_shared/core/index.ts';
 
 function ageOf(iso: string, today = new Date()): number {
   const [y, m, d] = iso.split('-').map(Number);
@@ -24,6 +24,16 @@ Deno.serve(
       const pace = (g.targetTimeSec ?? 0) / g.distanceKm;
       if (!(pace >= 150 && pace <= 720)) throw new HttpError(400, 'invalid_target_time');
     }
+    // Course officielle visée : on ne garde que des champs simples et bornés.
+    const r = g.race as { name?: unknown; city?: unknown; startTime?: unknown } | undefined;
+    g.race =
+      r && typeof r.name === 'string' && r.name.trim()
+        ? {
+            name: r.name.trim().slice(0, 80),
+            city: typeof r.city === 'string' && r.city.trim() ? r.city.trim().slice(0, 40) : undefined,
+            startTime: typeof r.startTime === 'string' ? (normalizeClockTime(r.startTime) ?? undefined) : undefined,
+          }
+        : undefined;
     if (![1, 2, 3, 4, 5].includes(body.sessionsPerWeek)) throw new HttpError(400, 'invalid_sessions');
     const days = Array.isArray(body.trainingDays) ? [...new Set(body.trainingDays.map(Number))].filter((d) => Number.isInteger(d) && d >= 0 && d <= 6).sort() : undefined;
     const trainingDays = days && days.length === body.sessionsPerWeek ? days : undefined;

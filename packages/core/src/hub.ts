@@ -12,6 +12,19 @@ export interface HubPlayer {
   runs30: number;
   /** Identifiants des défis en cours auxquels il participe. */
   challenges: string[];
+  /** Objectifs en cours et avancement (partagés entre amis uniquement). */
+  goals?: FriendGoal[];
+}
+
+export interface FriendGoal {
+  title: string;
+  eventDate: string;
+  /** Séances validées. */
+  done: number;
+  /** Séances prévues jusqu'à aujourd'hui. */
+  due: number;
+  /** Séances du plan. */
+  total: number;
 }
 
 export interface HubChallenge {

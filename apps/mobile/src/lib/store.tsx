@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   analyzeActivity,
   isInWindow,
@@ -10,6 +10,11 @@ import {
   evaluateSession,
   type Activity,
   type Athlete,
+  assignRuns,
+  shoeWear,
+  type RunLog,
+  type Shoe,
+  type ShoeWear,
   type SessionValidation,
   applyCaps,
   chestEarnings,
@@ -91,6 +96,12 @@ interface PersistedState {
   checkins: string[];
   /** Astuces du jour lues (identifiant = date). */
   tipsRead: string[];
+  /** Courses importées d'Apple Santé hors plan (démo). */
+  healthRuns?: RunLog[];
+  /** Courses vérifiées lues sur le serveur (mode connecté). */
+  serverRuns?: RunLog[];
+  /** Chaussures et attribution des courses à chaque paire. */
+  gear: Gear;
   /** Profil sportif saisi en mode démo (en ligne : il vit dans la fiche du compte). */
   athlete?: Athlete;
   /** Solde serveur (mode connecté). */
@@ -99,7 +110,30 @@ interface PersistedState {
   serverLedger?: Array<{ kind: string; label: string; points: number; created_at: string }>;
 }
 
+export interface Gear {
+  shoes: Shoe[];
+  defaultShoeId: string | null;
+  /** id de course → id de chaussure */
+  assignments: Record<string, string>;
+}
+
+const EMPTY_GEAR: Gear = { shoes: [], defaultShoeId: null, assignments: {} };
+
+/** Lit un objet `gear` venu du stockage ou du serveur, en ignorant ce qui est mal formé. */
+function parseGear(raw: unknown): Gear {
+  const g = (raw && typeof raw === 'object' ? raw : {}) as Partial<Gear>;
+  const shoes = Array.isArray(g.shoes)
+    ? g.shoes.filter((x): x is Shoe => !!x && typeof x.id === 'string' && typeof x.brand === 'string' && typeof x.model === 'string' && Number(x.lifeKm) > 0)
+    : [];
+  return {
+    shoes: shoes.map((x) => ({ ...x, startKm: Number(x.startKm) || 0, lifeKm: Number(x.lifeKm) })),
+    defaultShoeId: typeof g.defaultShoeId === 'string' && shoes.some((x) => x.id === g.defaultShoeId) ? g.defaultShoeId : null,
+    assignments: g.assignments && typeof g.assignments === 'object' ? (g.assignments as Record<string, string>) : {},
+  };
+}
+
 const INITIAL: PersistedState = {
+  gear: EMPTY_GEAR,
   plans: [],
   connections: { garmin: false, apple_health: false, health_connect: false, strava: false },
   redemptions: [],
@@ -114,6 +148,11 @@ export const MAX_ACTIVE_PLANS = 3;
 
 export function todayIso(): string {
   const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** Date locale AAAA-MM-JJ d'un instant. */
+export function localDate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
@@ -181,6 +220,14 @@ interface Store extends PersistedState {
   setEnrichment(planId: string, e: Enrichment): void;
   setConnection(p: Provider, on: boolean): void;
   setLocalAthlete(a: Athlete): void;
+  /** Toutes les courses connues, de la plus récente à la plus ancienne. */
+  runs: RunLog[];
+  shoes: Array<{ shoe: Shoe; wear: ShoeWear; isDefault: boolean }>;
+  addShoe(s: Omit<Shoe, 'id' | 'since'>, makeDefault: boolean): void;
+  updateShoe(id: string, patch: Partial<Omit<Shoe, 'id'>>): void;
+  removeShoe(id: string): void;
+  setDefaultShoe(id: string | null): void;
+  assignRun(runId: string, shoeId: string | null): void;
   connectStrava(): Promise<'connected' | 'cancelled' | 'error' | string>;
   sendToWatch(planId: string, sessionId: string): Promise<void>;
   simulateSync(planId: string, sessionId: string, scenario: Scenario): DemoResult | null;
@@ -198,13 +245,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [celebration, setCelebration] = useState<Celebration | null>(null);
+  // Mode connecté : on n'envoie l'équipement au serveur qu'après l'avoir lu une première fois.
+  const gearSynced = useRef(false);
 
   // ---------- Chargement local + migration depuis la v1 (un seul plan) ----------
   useEffect(() => {
     (async () => {
       try {
         const raw = await AsyncStorage.getItem(KEY);
-        if (raw) setState({ ...INITIAL, ...JSON.parse(raw) });
+        if (raw) {
+          const saved = JSON.parse(raw);
+          setState({ ...INITIAL, ...saved, gear: parseGear(saved.gear) });
+        }
         else {
           const v1 = await AsyncStorage.getItem('foulee/state/v1');
           if (v1) {
@@ -259,10 +311,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const { data: conns } = await supabase.from('device_connections').select('provider').is('revoked_at', null);
       const { data: bal } = await supabase.from('points_balance').select('balance').maybeSingle();
       const { data: hist } = await supabase.from('points_ledger').select('kind, label, points, created_at').order('created_at', { ascending: false }).limit(100);
+      const { data: acts } = await supabase
+        .from('activities')
+        .select('id, start_time, distance_m, duration_sec, source, trust_verdict, duplicate_of')
+        .neq('trust_verdict', 'rejected')
+        .is('duplicate_of', null)
+        .order('start_time', { ascending: false })
+        .limit(80);
+      const { data: u } = await supabase.auth.getUser();
+      const { data: prof } = u.user ? await supabase.from('profiles').select('gear').eq('id', u.user.id).maybeSingle() : { data: null };
+      const serverRuns: RunLog[] = (acts ?? []).map((a) => ({
+        id: a.id,
+        date: localDate(new Date(a.start_time)),
+        distanceKm: Math.round(a.distance_m / 100) / 10,
+        durationSec: a.duration_sec,
+        source: a.source,
+      }));
 
       setState((s) => ({
         ...s,
         serverBalance: bal?.balance ?? 0,
+        serverRuns,
+        gear: prof ? parseGear(prof.gear) : s.gear,
         serverLedger: hist ?? [],
         connections: { ...INITIAL.connections, ...Object.fromEntries((conns ?? []).map((c) => [c.provider, true])) },
         plans: (plans ?? []).map((p) => ({
@@ -293,6 +363,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           ),
         })),
       }));
+      gearSynced.current = true;
     } finally {
       setSyncing(false);
     }
@@ -307,7 +378,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
     const { data } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN' && session && !session.user.is_anonymous) refresh().catch(() => {});
-      if (event === 'SIGNED_OUT') setState((st) => ({ ...INITIAL, checkins: [], tipsRead: st.tipsRead }));
+      if (event === 'SIGNED_OUT') {
+        gearSynced.current = false;
+        setState((st) => ({ ...INITIAL, checkins: [], tipsRead: st.tipsRead }));
+      }
     });
     return () => data.subscription.unsubscribe();
   }, [ready, refresh]);
@@ -333,6 +407,49 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const challenge = sponsoredChallengeOf(week);
     return { challenge, progress: sponsoredProgress(challenge, runsOf(state.plans), week), claimed: state.sponsoredClaims.includes(week) };
   }, [state.plans, state.sponsoredClaims]);
+
+  // ---------- Courses et chaussures ----------
+  const runs: RunLog[] = useMemo(() => {
+    if (!isDemo) return state.serverRuns ?? [];
+    const fromPlans: RunLog[] = state.plans.flatMap((p) =>
+      p.plan.sessions
+        .filter((x) => ['validee', 'partielle'].includes(p.validations[x.id]?.status ?? ''))
+        .map((x) => ({
+          id: `${p.id}:${x.id}`,
+          date: x.date,
+          distanceKm: Math.round((x.distanceM / 1000) * Math.min(1, p.validations[x.id].volumeScore || 1) * 10) / 10,
+          durationSec: x.durationSec,
+          source: p.validations[x.id].source || 'app',
+          title: x.title,
+        })),
+    );
+    return [...fromPlans, ...(state.healthRuns ?? [])].sort((a, b) => b.date.localeCompare(a.date));
+  }, [state.plans, state.healthRuns, state.serverRuns]);
+
+  // Chaque nouvelle course part sur la paire par défaut.
+  useEffect(() => {
+    if (!ready) return;
+    const next = assignRuns(runs, state.gear.assignments, state.gear.shoes, state.gear.defaultShoeId);
+    if (next !== state.gear.assignments) setState((st) => ({ ...st, gear: { ...st.gear, assignments: next } }));
+  }, [ready, runs, state.gear]);
+
+  // En ligne : l'équipement suit le compte.
+  useEffect(() => {
+    if (isDemo || !supabase || !gearSynced.current) return;
+    const sb = supabase;
+    const t = setTimeout(() => {
+      sb.auth.getUser().then(({ data }) => {
+        if (data.user) sb.from('profiles').update({ gear: state.gear }).eq('id', data.user.id).then(() => {});
+      });
+    }, 800);
+    return () => clearTimeout(t);
+  }, [state.gear]);
+
+  const shoes = useMemo(
+    () => state.gear.shoes.map((shoe) => ({ shoe, wear: shoeWear(shoe, runs, state.gear.assignments), isDefault: shoe.id === state.gear.defaultShoeId })),
+    [state.gear, runs],
+  );
+  const setGear = (f: (g: Gear) => Gear) => setState((st) => ({ ...st, gear: f(st.gear) }));
 
   // ---------- Apple Santé : disponibilité, pas du jour ----------
   const [healthOk, setHealthOk] = useState(false);
@@ -428,6 +545,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     let matched = 0;
     setState((st) => {
       let plans = st.plans;
+      const known = new Set((st.healthRuns ?? []).map((r) => r.id));
+      const healthRuns = [
+        ...(st.healthRuns ?? []),
+        ...runs
+          .filter((a) => !known.has(`hk:${a.startTime}`))
+          .map((a) => ({ id: `hk:${a.startTime}`, date: localDate(new Date(a.startTime)), distanceKm: Math.round(a.distanceM / 100) / 10, durationSec: a.durationSec, source: 'apple_health' })),
+      ].slice(-200);
       for (const a of runs) {
         const trust = analyzeActivity(a);
         const candidates = plans.flatMap((p) =>
@@ -442,7 +566,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         matched++;
         plans = plans.map((p) => (p.id === pick.p.id ? { ...p, validations: { ...p.validations, [pick.x.id]: result } } : p));
       }
-      return { ...st, plans };
+      return { ...st, plans, healthRuns };
     });
     return matched;
   };
@@ -510,6 +634,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
     },
     setEnrichment: (planId, e) => updatePlan(planId, (p) => ({ ...p, enrichment: e })),
     setLocalAthlete: (a) => setState((s) => ({ ...s, athlete: a })),
+    runs,
+    shoes,
+    addShoe: (sh, makeDefault) => {
+      const id = `sh${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+      // On compte à partir d'aujourd'hui : les courses passées restent sur les paires d'avant.
+      setGear((g) => ({ ...g, shoes: [...g.shoes, { ...sh, id, since: todayIso() }], defaultShoeId: makeDefault || !g.defaultShoeId ? id : g.defaultShoeId }));
+    },
+    updateShoe: (id, patch) => setGear((g) => ({ ...g, shoes: g.shoes.map((x) => (x.id === id ? { ...x, ...patch, id } : x)), defaultShoeId: patch.retired && g.defaultShoeId === id ? null : g.defaultShoeId })),
+    removeShoe: (id) =>
+      setGear((g) => ({
+        shoes: g.shoes.filter((x) => x.id !== id),
+        defaultShoeId: g.defaultShoeId === id ? null : g.defaultShoeId,
+        assignments: Object.fromEntries(Object.entries(g.assignments).filter(([, v]) => v !== id)),
+      })),
+    setDefaultShoe: (id) => setGear((g) => ({ ...g, defaultShoeId: id })),
+    assignRun: (runId, shoeId) =>
+      setGear((g) => {
+        const assignments = { ...g.assignments };
+        // « Aucune paire » est mémorisé pour que la paire par défaut ne la reprenne pas.
+        assignments[runId] = shoeId ?? 'none';
+        return { ...g, assignments };
+      }),
     setConnection: (p, on) => setState((s) => ({ ...s, connections: { ...s.connections, [p]: on } })),
     connectStrava: async () => {
       // Le secret Strava reste sur le serveur : l'app ouvre juste la page d'autorisation.

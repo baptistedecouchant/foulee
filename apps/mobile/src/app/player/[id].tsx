@@ -2,7 +2,7 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
-import { Avatar, ChallengeCard } from '@/components/social';
+import { Avatar, ChallengeCard, FriendGoalRow } from '@/components/social';
 import { Button, Card, Row, SectionTitle, Txt } from '@/components/ui';
 import { GradientCard } from '@/components/visuals';
 import { Gradients, Radius, Spacing } from '@/constants/theme';
@@ -63,6 +63,17 @@ export default function PlayerScreen() {
         </View>
       </Row>
       <Button kind="flame" icon="flash" label={`Défier ${p.name}`} onPress={() => router.push({ pathname: '/challenge/new', params: { with: p.id } })} />
+
+      {(p.goals ?? []).length > 0 && (
+        <>
+          <SectionTitle>{`Objectif${(p.goals ?? []).length > 1 ? 's' : ''} de ${p.name}`}</SectionTitle>
+          {(p.goals ?? []).map((g) => (
+            <Card key={g.title + g.eventDate}>
+              <FriendGoalRow g={g} />
+            </Card>
+          ))}
+        </>
+      )}
 
       {shared.length > 0 && (
         <>

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { CHALLENGES } from '@foulee/core';
 
-import { Avatar, ChallengeCard } from '@/components/social';
+import { Avatar, ChallengeCard, FriendGoalRow } from '@/components/social';
 import { Button, Card, Chip, Ionicons, Row, SectionTitle, Txt } from '@/components/ui';
 import { GradientCard } from '@/components/visuals';
 import { Gradients, Radius, Spacing } from '@/constants/theme';
@@ -209,6 +209,11 @@ export default function HubScreen() {
                     {p.city ? `${p.city} · ` : ''}
                     {km(p.km7)} / 7 j · {km(p.km30)} / 30 j
                   </Txt>
+                  {(p.goals ?? []).slice(0, 1).map((g) => (
+                    <View key={g.title + g.eventDate} style={{ marginTop: 6 }}>
+                      <FriendGoalRow g={g} compact />
+                    </View>
+                  ))}
                   {p.challenges.length > 0 && (
                     <Row style={{ flexWrap: 'wrap', marginTop: 4 }}>
                       {p.challenges.map((id) => (

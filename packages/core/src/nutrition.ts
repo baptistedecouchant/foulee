@@ -98,3 +98,129 @@ export function warmupAdvice(session: PlannedSession): string | null {
       return null;
   }
 }
+
+// ---------- Semaine de la course ----------
+
+export interface RaceWeekStep {
+  /** Repère temporel : « J-3 », « Le matin », « Pendant »… */
+  when: string;
+  title: string;
+  items: string[];
+  icon: NutritionTip['icon'] | 'bed' | 'walk' | 'flag';
+}
+
+const hhmm = (min: number) => {
+  const m = ((min % 1440) + 1440) % 1440;
+  return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`;
+};
+
+/**
+ * Guide de la semaine de course : entraînement, sommeil, alimentation et hydratation,
+ * adaptés à la distance, à la durée prévue, à l'heure de départ et au poids (charge glucidique).
+ */
+export function raceWeekGuide(opts: { distanceKm: number; expectedSec: number; startTime?: string; weightKg?: number }): RaceWeekStep[] {
+  const { distanceKm, expectedSec, weightKg } = opts;
+  const minutes = expectedSec / 60;
+  const marathon = distanceKm >= 30;
+  const long = minutes >= 75 || distanceKm >= 20;
+  const [h, mi] = (opts.startTime ?? '').split(':').map(Number);
+  const start = Number.isFinite(h) && Number.isFinite(mi) ? h * 60 + mi : null;
+  const at = (offsetMin: number, fallback: string) => (start == null ? fallback : `vers ${hhmm(start - offsetMin)}`);
+  const carbs = (gPerKg: number) => (weightKg ? ` (environ ${Math.round((gPerKg * weightKg) / 10) * 10} g de glucides par jour pour toi)` : '');
+  const steps: RaceWeekStep[] = [];
+
+  steps.push({
+    when: 'Toute la semaine',
+    title: 'Affûtage',
+    icon: 'bed',
+    items: [
+      'Le volume baisse, quelques rappels d’allure gardent les jambes vives : c’est normal de se sentir « trop frais ».',
+      'Vise 8 h de sommeil, surtout l’avant-veille : c’est la nuit qui compte le plus.',
+      'Rien de nouveau : chaussures, tenue, gels et petit-déjeuner déjà testés à l’entraînement.',
+    ],
+  });
+
+  if (marathon) {
+    steps.push({
+      when: 'J-3 à J-1',
+      title: 'Charge en glucides',
+      icon: 'restaurant',
+      items: [
+        `Augmente nettement les féculents à chaque repas : pâtes, riz, pain, pommes de terre, semoule${carbs(8)}.`,
+        'Réduis un peu les fibres (légumes crus, céréales complètes) et le gras pour alléger la digestion.',
+        'Bois régulièrement : des urines claires sont un bon repère.',
+      ],
+    });
+  } else if (long) {
+    steps.push({
+      when: 'J-2 et J-1',
+      title: 'Plus de féculents',
+      icon: 'restaurant',
+      items: [
+        `Une portion de féculents un peu plus généreuse à chaque repas${carbs(6)}.`,
+        'Évite les plats très gras, épicés ou riches en fibres la veille.',
+        'Bois régulièrement dans la journée.',
+      ],
+    });
+  } else {
+    steps.push({
+      when: 'J-2 et J-1',
+      title: 'Repas habituels',
+      icon: 'restaurant',
+      items: ['Pas besoin de charge glucidique sur cette distance : des repas équilibrés et digestes suffisent.', 'Bois normalement, sans excès.'],
+    });
+  }
+
+  steps.push({
+    when: 'La veille',
+    title: 'Préparer le jour J',
+    icon: 'walk',
+    items: [
+      'Dîner simple et tôt : féculents, un peu de protéines, peu de fibres et de gras.',
+      'Prépare tout le soir : dossard, épingles, chaussures, tenue, montre chargée' + (long ? ', gels' : '') + '.',
+      ...(opts.startTime ? [`Départ à ${hhmm(start!)} : repère ton trajet et vise d’être sur place ${at(45, '45 min avant')}.`] : []),
+    ],
+  });
+
+  steps.push({
+    when: 'Le matin',
+    title: 'Petit-déjeuner et hydratation',
+    icon: 'cafe',
+    items: [
+      `Petit-déjeuner ${at(180, '3 h avant le départ')} : pain ou flocons d’avoine, miel ou confiture, banane, boisson chaude. Celui que tu as testé.`,
+      `500 ml d’eau entre le réveil et ${start == null ? 'le départ' : hhmm(start - 60)}, puis quelques gorgées.`,
+      long ? `Un demi-gel ou une compote ${at(15, '15 min avant le départ')}.` : 'Rien à manger dans la dernière heure, sauf habitude.',
+      `Échauffement léger ${at(20, '20 min avant')} : 10 min de footing et 2 ou 3 accélérations.`,
+    ],
+  });
+
+  const during: string[] = [];
+  if (marathon) {
+    const gels = Math.max(3, Math.round((minutes - 30) / 30));
+    during.push(
+      '60 à 90 g de glucides par heure : un gel toutes les 25 à 30 min, à partir de la 30e minute.',
+      `Prévois environ ${gels} gels pour ${Math.round(minutes / 60 * 10) / 10} h de course, toujours avec de l’eau.`,
+      'Bois à chaque ravitaillement, quelques gorgées, même sans soif. Une boisson avec du sel s’il fait chaud.',
+    );
+  } else if (long) {
+    during.push(
+      '30 à 60 g de glucides par heure : un gel vers la 40e minute, puis toutes les 30 à 40 min.',
+      'Quelques gorgées d’eau à chaque ravitaillement.',
+    );
+  } else {
+    during.push('Pas besoin de manger. Quelques gorgées d’eau au ravitaillement s’il fait chaud.', 'Pars à ton allure, pas plus vite : les premiers kilomètres décident de ta course.');
+  }
+  steps.push({ when: 'Pendant', title: 'Pendant la course', icon: 'flash', items: during });
+
+  steps.push({
+    when: 'Après',
+    title: 'Récupération',
+    icon: 'nutrition',
+    items: [
+      'Tout de suite : eau, banane ou boisson de récupération, glucides + protéines.',
+      'Dans les 2 h : un vrai repas, féculents, protéines, légumes.',
+      marathon ? 'Marche et footings très légers seulement les jours suivants : compte une semaine avant de reprendre l’intensité.' : 'Une ou deux journées faciles avant de reprendre.',
+    ],
+  });
+  return steps;
+}

@@ -22,6 +22,11 @@ export default function HomeScreen() {
     .flatMap((p) => p.plan.sessions.filter((s) => s.date >= today && !p.validations[s.id]).map((s) => ({ p, s })))
     .sort((a, b) => a.s.date.localeCompare(b.s.date))[0];
 
+  const raceSoon = plans
+    .map((p) => ({ p, days: daysLeft(p.plan, today) }))
+    .filter((x) => x.days >= 0 && x.days <= 7)
+    .sort((a, b) => a.days - b.days)[0];
+
   const upcomingBadges = BADGES.map((b) => ({ b, v: b.progress(stats) }))
     .filter((x) => x.v < 1)
     .sort((a, b) => b.v - a.v)
@@ -65,6 +70,24 @@ export default function HomeScreen() {
           <StatPill icon="flash" value={`${fmtInt(level.xp)} XP`} color="#04281B" bg={t.xp} />
         </Row>
       </GradientCard>
+
+      {/* ---------- Semaine de course ---------- */}
+      {raceSoon && (
+        <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/plan/[id]', params: { id: raceSoon.p.id } })}>
+          <GradientCard colors={Gradients.flame} style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Ionicons name="flag" size={26} color="#fff" />
+            <View style={{ flex: 1 }}>
+              <Txt variant="title" color="#fff">
+                {raceSoon.days > 0 ? `J-${raceSoon.days} : c’est la semaine de course` : 'C’est le jour J !'}
+              </Txt>
+              <Txt variant="caption" color="rgba(255,255,255,0.9)">
+                Affûtage, repas, petit-déjeuner et ravitaillement : ton guide est prêt.
+              </Txt>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#fff" />
+          </GradientCard>
+        </Pressable>
+      )}
 
       {/* ---------- Pas du jour (Apple Santé) ---------- */}
       <Card style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.m, paddingVertical: Spacing.m }}>

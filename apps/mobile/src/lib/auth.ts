@@ -27,6 +27,8 @@ export interface Profile {
   healthConsent: boolean;
   weightKg: number | null;
   heightCm: number | null;
+  /** Objectifs et avancement visibles par les amis. */
+  shareGoals: boolean;
   email: string | null;
   providers: string[];
 }
@@ -188,7 +190,7 @@ export async function loadProfile(): Promise<Profile | null> {
   if (!u.user) return null;
   const { data: p } = await supabase
     .from('profiles')
-    .select('first_name, last_name, birth_date, terms_accepted_at, health_consent_at, weight_kg, height_cm')
+    .select('*')
     .eq('id', u.user.id)
     .maybeSingle();
   return {
@@ -199,6 +201,7 @@ export async function loadProfile(): Promise<Profile | null> {
     healthConsent: Boolean(p?.health_consent_at),
     weightKg: p?.weight_kg != null ? Number(p.weight_kg) : null,
     heightCm: p?.height_cm ?? null,
+    shareGoals: p?.share_goals !== false,
     email: u.user.email ?? null,
     providers: (u.user.identities ?? []).map((i) => i.provider),
   };
@@ -231,6 +234,14 @@ export async function saveBodyMetrics(m: { weightKg: number | null; heightCm: nu
   const { data } = await sb.auth.getUser();
   if (!data.user) throw new Error('not_signed_in');
   const { error } = await sb.from('profiles').update({ weight_kg: m.weightKg, height_cm: m.heightCm }).eq('id', data.user.id);
+  if (error) throw error;
+}
+
+export async function setShareGoals(on: boolean) {
+  const sb = client();
+  const { data } = await sb.auth.getUser();
+  if (!data.user) throw new Error('not_signed_in');
+  const { error } = await sb.from('profiles').update({ share_goals: on }).eq('id', data.user.id);
   if (error) throw error;
 }
 
