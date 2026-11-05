@@ -1,0 +1,48 @@
+# Diagnostic de la connexion Google / Apple (ne révèle aucun secret).
+name: Diagnostiquer la connexion Google et Apple
+on: workflow_dispatch
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Réglages d'authentification Supabase
+        env:
+          REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          curl -sS "https://$REF.supabase.co/auth/v1/settings" -H "apikey: $KEY" | python3 -c "
+          import sys, json
+          d = json.load(sys.stdin)
+          ext = d.get('external', {})
+          print('Google activé :', ext.get('google'))
+          print('Apple activé  :', ext.get('apple'))
+          print('E-mail activé :', ext.get('email'))
+          "
+      - name: Redirection vers Google
+        env:
+          REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          for redirect in "foulee://auth" "exp://u.expo.dev/0ac2c357-42e0-4808-a2bf-d48911475fca/--/auth"; do
+            echo "== retour demandé : $redirect"
+            out=$(curl -sS -o body.txt -w '%{http_code} %{redirect_url}' -G "https://$REF.supabase.co/auth/v1/authorize" --data-urlencode "provider=google" --data-urlencode "redirect_to=$redirect" --data-urlencode "code_challenge=abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrs" --data-urlencode "code_challenge_method=s256")
+            code=${out%% *}; loc=${out#* }
+            echo "Réponse de Supabase : $code"
+            if [ "$code" = "302" ] || [ "$code" = "303" ]; then
+              python3 - "$loc" "$REF" <<'PY'
+          import sys, urllib.parse as u
+          loc, ref = sys.argv[1], sys.argv[2]
+          p = u.urlparse(loc); q = u.parse_qs(p.query)
+          print('Redirige vers :', p.netloc)
+          ru = q.get('redirect_uri', ['?'])[0].replace(ref, '<ta-reference>')
+          print('redirect_uri envoyé à Google :', ru)
+          cid = q.get('client_id', [''])[0]
+          print('client_id présent :', bool(cid), '| se termine par .apps.googleusercontent.com :', cid.endswith('.apps.googleusercontent.com'))
+          PY
+              # Google accepte-t-il ce client et cette adresse de retour ?
+              g=$(curl -sS -L -o gbody.html -w '%{http_code}' "$loc")
+              echo "Page Google : HTTP $g"
+              grep -o -E 'redirect_uri_mismatch|invalid_client|invalid_request|disabled_client|org_internal|access_denied|deleted_client|unauthorized_client' gbody.html | sort -u | sed 's/^/Erreur Google détectée : /' || echo "Aucune erreur Google détectée sur la page de connexion"
+            else
+              sed 's/"[a-z0-9]\{20\}\.supabase\.co"/<ref>/' body.txt | head -c 400; echo
+            fi
+          done
