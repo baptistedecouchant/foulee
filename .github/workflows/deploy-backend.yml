@@ -68,6 +68,15 @@ jobs:
           supabase secrets set --env-file secrets.env --project-ref "$PROJECT_REF" --yes
           rm secrets.env
 
+      - name: E-mails de connexion (code à 6 chiffres, serveur d'envoi)
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          SMTP_SENDER: ${{ secrets.SMTP_SENDER }}
+        run: python3 scripts/configure-auth-email.py
+
       - name: Fonctions
         if: env.SKIP != '1'
         run: supabase functions deploy --project-ref "$PROJECT_REF" --yes
