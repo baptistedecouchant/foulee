@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 
 import { loadProfile, profileComplete, type Profile } from '@/lib/auth';
+import { importProviderAvatar } from '@/lib/media';
 import { isDemo, supabase } from '@/lib/supabase';
 
 export type SessionStatus = 'loading' | 'signedOut' | 'incomplete' | 'ready' | 'demo';
@@ -30,6 +31,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     const p = await loadProfile().catch(() => null);
     setProfile(p);
     setStatus(profileComplete(p) ? 'ready' : 'incomplete');
+    // Première connexion avec Google : on reprend sa photo de profil.
+    if (p && !p.avatarUrl) {
+      importProviderAvatar()
+        .then((ok) => (ok ? loadProfile().then((q) => q && setProfile(q)) : undefined))
+        .catch(() => {});
+    }
   }, []);
 
   useEffect(() => {

@@ -1,18 +1,9 @@
-import * as Haptics from "expo-haptics";
-import { LinearGradient } from "expo-linear-gradient";
-import { router, Stack } from "expo-router";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  TextInput,
-  View,
-  type ScrollViewInstance,
-} from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as Haptics from 'expo-haptics';
+import { LinearGradient } from 'expo-linear-gradient';
+import { router, Stack } from 'expo-router';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Pressable, ScrollView, StyleSheet, TextInput, View, type ScrollViewInstance } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   addDays,
   assessGoal,
@@ -22,9 +13,7 @@ import {
   distanceLabel,
   formatPace,
   formatTime,
-  normalizeClockTime,
   objectiveLevel,
-  parseGoalTime,
   RACE_CALENDAR,
   riegel,
   searchRaces,
@@ -38,131 +27,83 @@ import {
   type PlanRequest,
   type RaceEvent,
   type SessionsPerWeek,
-} from "@foulee/core";
+} from '@foulee/core';
 
-import { GoalCelebration } from "@/components/goal-celebration";
-import {
-  Button,
-  Ionicons,
-  ProgressBar,
-  Txt,
-  type IconName,
-} from "@/components/ui";
-import { PhotoCard } from "@/components/visuals";
-import { Gradients, Radius, Spacing } from "@/constants/theme";
-import { useTheme } from "@/hooks/use-theme";
-import { useAthlete } from "@/lib/athlete";
-import { heightError, weightError } from "@/lib/auth";
-import {
-  formatDateFr,
-  MAX_ACTIVE_PLANS,
-  todayIso,
-  useStore,
-} from "@/lib/store";
+import { GoalCelebration } from '@/components/goal-celebration';
+import { CalendarPicker, ClockPicker, DurationPicker, NumberPicker } from '@/components/pickers';
+import { Button, Ionicons, ProgressBar, Txt, type IconName } from '@/components/ui';
+import { PhotoCard } from '@/components/visuals';
+import { Gradients, Radius, Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
+import { useAthlete } from '@/lib/athlete';
+import { formatDateFr, MAX_ACTIVE_PLANS, todayIso, useStore } from '@/lib/store';
 
 // ---------- Données ----------
 
+const LEVELS: Array<{ id: Extract<CurrentLevel, { kind: 'estimate' }>['level']; label: string; hint: string; icon: IconName }> = [
+  { id: 'debutant', label: 'Je débute', hint: '20 à 30 min sans m’arrêter', icon: 'walk' },
+  { id: 'occasionnel', label: 'Un peu', hint: '1 à 2 sorties par semaine', icon: 'footsteps' },
+  { id: 'regulier', label: 'Régulier', hint: '3 sorties ou plus', icon: 'speedometer' },
+  { id: 'confirme', label: 'Confirmé', hint: 'Je fais du fractionné', icon: 'flash' },
+];
+
 const DISTANCES = [
-  { km: 5, label: "5 km" },
-  { km: 10, label: "10 km" },
-  { km: 21.0975, label: "Semi" },
-  { km: 42.195, label: "Marathon" },
+  { km: 5, label: '5 km' },
+  { km: 10, label: '10 km' },
+  { km: 21.0975, label: 'Semi-marathon' },
+  { km: 42.195, label: 'Marathon' },
 ];
 
-const LEVELS: Array<{
-  id: Extract<CurrentLevel, { kind: "estimate" }>["level"];
-  label: string;
-  hint: string;
-  icon: IconName;
-}> = [
-  {
-    id: "debutant",
-    label: "Je débute",
-    hint: "20 à 30 min sans m’arrêter",
-    icon: "walk",
-  },
-  {
-    id: "occasionnel",
-    label: "Un peu",
-    hint: "1 à 2 sorties par semaine",
-    icon: "footsteps",
-  },
-  {
-    id: "regulier",
-    label: "Régulier",
-    hint: "3 sorties ou plus",
-    icon: "speedometer",
-  },
-  {
-    id: "confirme",
-    label: "Confirmé",
-    hint: "Je fais du fractionné",
-    icon: "flash",
-  },
-];
+/** Objectifs proposés, rangés par distance (sans chrono = « finir »). */
+const PRESETS: Record<number, Array<{ id: string; sec?: number; sub: string }>> = {
+  5: [
+    { id: '5-35', sec: 2100, sub: 'en 35 min' },
+    { id: '5-30', sec: 1800, sub: 'en 30 min' },
+    { id: '5-25', sec: 1500, sub: 'en 25 min' },
+    { id: '5-fin', sub: 'le finir' },
+  ],
+  10: [
+    { id: '10-60', sec: 3600, sub: 'en 1 h' },
+    { id: '10-55', sec: 3300, sub: 'en 55 min' },
+    { id: '10-50', sec: 3000, sub: 'en 50 min' },
+    { id: '10-45', sec: 2700, sub: 'en 45 min' },
+  ],
+  21.0975: [
+    { id: 'semi-215', sec: 8100, sub: 'en 2 h 15' },
+    { id: 'semi-200', sec: 7200, sub: 'en 2 h' },
+    { id: 'semi-145', sec: 6300, sub: 'en 1 h 45' },
+    { id: 'semi-fin', sub: 'le finir' },
+  ],
+  42.195: [
+    { id: 'mara-430', sec: 16200, sub: 'en 4 h 30' },
+    { id: 'mara-400', sec: 14400, sub: 'en 4 h' },
+    { id: 'mara-345', sec: 13500, sub: 'en 3 h 45' },
+    { id: 'mara-fin', sub: 'le finir' },
+  ],
+};
 
-/** Objectifs proposés par défaut. */
-const PRESETS: Array<{
-  id: string;
-  km: number;
-  sec?: number;
-  title: string;
-  sub: string;
-}> = [
-  { id: "10k60", km: 10, sec: 3600, title: "10 km", sub: "en 1 h" },
-  { id: "semi2h", km: 21.0975, sec: 7200, title: "Semi", sub: "en 2 h" },
-  { id: "mara4h", km: 42.195, sec: 14400, title: "Marathon", sub: "en 4 h" },
-  { id: "5k30", km: 5, sec: 1800, title: "5 km", sub: "en 30 min" },
-  { id: "10k50", km: 10, sec: 3000, title: "10 km", sub: "en 50 min" },
-  { id: "semi145", km: 21.0975, sec: 6300, title: "Semi", sub: "en 1 h 45" },
-  { id: "finish-semi", km: 21.0975, title: "Semi", sub: "le finir" },
-  { id: "finish-mara", km: 42.195, title: "Marathon", sub: "le finir" },
-];
+const DAY_NAMES = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'];
+const DAYS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
 
-const DAYS = ["L", "M", "M", "J", "V", "S", "D"];
-const DAY_NAMES = [
-  "lundi",
-  "mardi",
-  "mercredi",
-  "jeudi",
-  "vendredi",
-  "samedi",
-  "dimanche",
-];
-
-const LEVEL_STYLE: Record<
-  ObjectiveLevel,
-  { colors: readonly [string, string]; bars: number }
-> = {
+const LEVEL_STYLE: Record<ObjectiveLevel, { colors: readonly [string, string]; bars: number }> = {
   débutant: { colors: Gradients.xp, bars: 1 },
   intermédiaire: { colors: Gradients.energy, bars: 2 },
   expert: { colors: Gradients.flame, bars: 3 },
 };
 
-const STEPS = [
-  "Toi",
-  "Ta forme",
-  "Ton objectif",
-  "Ta course",
-  "Ton rythme",
-  "Récap",
-] as const;
-/** « 09:30 » → « 9 h 30 » */
-const clock = (hhmm: string) =>
-  `${Number(hhmm.slice(0, 2))} h ${hhmm.slice(3, 5)}`;
 const MAX_WEEKS = 30;
 const stepFor = (sec: number) => (sec < 1800 ? 15 : sec < 5400 ? 30 : 60);
 const roundTo = (s: number, step: number) => Math.round(s / step) * step;
-const num = (s: string) => {
-  const n = Number(s.replace(",", "."));
-  return s.trim() && Number.isFinite(n) ? n : null;
-};
 const sameKm = (a: number, b: number) => Math.abs(a - b) < 0.3;
-const kmLabel = (km: number) =>
-  `${String(Math.round(km * 10) / 10).replace(".", ",")} km`;
+const kmLabel = (km: number) => `${String(Math.round(km * 10) / 10).replace('.', ',')} km`;
+/** « 09:30 » → « 9 h 30 » */
+const clock = (hhmm: string) => `${Number(hhmm.slice(0, 2))} h ${hhmm.slice(3, 5)}`;
+const dowOf = (iso: string) => (new Date(iso + 'T12:00:00').getDay() + 6) % 7;
 
-type RefSource = "run" | "manual" | "estimate";
-type When = "race" | "date";
+type RefSource = 'run' | 'manual' | 'estimate';
+type When = 'race' | 'date';
+type Step = 'toi' | 'perf' | 'course' | 'rythme' | 'objectif' | 'recap';
+const STEPS: Step[] = ['toi', 'perf', 'course', 'rythme', 'objectif', 'recap'];
 
 export default function GoalScreen() {
   const t = useTheme();
@@ -172,56 +113,46 @@ export default function GoalScreen() {
   const today = todayIso();
   const start = suggestedStartDate(today);
   const scroll = useRef<ScrollViewInstance>(null);
+  const recent = useMemo(() => runs.filter((r) => r.distanceKm >= 3 && r.durationSec > 600).slice(0, 5), [runs]);
 
-  const recent = useMemo(
-    () =>
-      runs.filter((r) => r.distanceKm >= 3 && r.durationSec > 600).slice(0, 5),
-    [runs],
-  );
-
-  const [step, setStep] = useState(0);
+  // Poids et taille déjà connus : on ne les redemande pas (on peut toujours revenir les modifier).
+  const [step, setStep] = useState<number>(saved.weightKg && saved.heightCm ? 1 : 0);
   // 1. Toi
-  const [weight, setWeight] = useState(
-    saved.weightKg ? String(saved.weightKg) : "",
-  );
-  const [height, setHeight] = useState(
-    saved.heightCm ? String(saved.heightCm) : "",
-  );
-  // 2. Forme
-  const [refSource, setRefSource] = useState<RefSource>(
-    recent.length ? "run" : "manual",
-  );
+  const [weightKg, setWeightKg] = useState<number | null>(saved.weightKg ?? null);
+  const [heightCm, setHeightCm] = useState<number | null>(saved.heightCm ?? null);
+  // 2. Dernière performance
+  const [refSource, setRefSource] = useState<RefSource>(recent.length ? 'run' : 'manual');
   const [runId, setRunId] = useState<string | null>(recent[0]?.id ?? null);
   const [refKm, setRefKm] = useState(10);
-  const [refTime, setRefTime] = useState("");
-  const [level, setLevel] =
-    useState<(typeof LEVELS)[number]["id"]>("occasionnel");
-  // 3. Objectif
-  const [preset, setPreset] = useState<string | null>(null);
-  const [mode, setMode] = useState<GoalMode>("chrono");
-  const [distance, setDistance] = useState<number | "autre">(10);
-  const [otherKm, setOtherKm] = useState("15");
-  const [targetText, setTargetText] = useState("");
-  // 4. Course
-  const [when, setWhen] = useState<When>("race");
-  const [query, setQuery] = useState("");
+  const [refSec, setRefSec] = useState<number | null>(null);
+  const [level, setLevel] = useState<(typeof LEVELS)[number]['id']>('occasionnel');
+  // 3. Course
+  const [when, setWhen] = useState<When>('race');
+  const [query, setQuery] = useState('');
   const [raceId, setRaceId] = useState<string | null>(null);
-  const [weeks, setWeeks] = useState(12);
-  const [raceDow, setRaceDow] = useState(6);
-  const [startTime, setStartTime] = useState("");
-  // 5. Rythme
+  const [raceKm, setRaceKm] = useState<number | null>(null);
+  const [freeDate, setFreeDate] = useState<string | null>(null);
+  const [startTime, setStartTime] = useState<string | null>(null);
+  // 4. Rythme
   const [sessions, setSessions] = useState<SessionsPerWeek>(3);
   const [days, setDays] = useState<number[]>(DAY_SETS[3]);
+  // 5. Objectif
+  const [preset, setPreset] = useState<string | null>(null);
+  const [mode, setMode] = useState<GoalMode>('chrono');
+  const [customKm, setCustomKm] = useState(10);
+  const [targetSec, setTargetSec] = useState<number | null>(null);
   // Envoi
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tried, setTried] = useState(false);
   const [created, setCreated] = useState<string | null>(null);
 
-  // Le profil peut arriver après l'ouverture de l'écran.
+  // Le profil peut arriver juste après l'ouverture : on reprend les valeurs et on saute l'étape « Toi ».
+  const touched = useRef(false);
   useEffect(() => {
-    if (saved.weightKg) setWeight((w) => w || String(saved.weightKg));
-    if (saved.heightCm) setHeight((h) => h || String(saved.heightCm));
+    if (saved.weightKg) setWeightKg((w) => w ?? saved.weightKg!);
+    if (saved.heightCm) setHeightCm((h) => h ?? saved.heightCm!);
+    if (saved.weightKg && saved.heightCm && !touched.current) setStep((x) => (x === 0 ? 1 : x));
   }, [saved.weightKg, saved.heightCm]);
   useEffect(() => {
     scroll.current?.scrollTo({ y: 0, animated: false });
@@ -229,133 +160,64 @@ export default function GoalScreen() {
   }, [step]);
 
   // ---------- Valeurs dérivées ----------
-  const weightKg = num(weight);
-  const heightCm = num(height);
-  const athlete: Athlete = {
-    age: saved.age,
-    weightKg: weightKg != null && !weightError(weightKg) ? weightKg : undefined,
-    heightCm: heightCm != null && !heightError(heightCm) ? heightCm : undefined,
-  };
-
+  const athlete: Athlete = { age: saved.age, weightKg: weightKg ?? undefined, heightCm: heightCm ?? undefined };
   const run = recent.find((r) => r.id === runId);
-  const manualSec = parseGoalTime(refTime, refKm);
   const currentLevel: CurrentLevel | null =
-    refSource === "estimate"
-      ? { kind: "estimate", level }
-      : refSource === "run"
+    refSource === 'estimate'
+      ? { kind: 'estimate', level }
+      : refSource === 'run'
         ? run
-          ? {
-              kind: "race",
-              distanceKm: run.distanceKm,
-              timeSec: run.durationSec,
-            }
+          ? { kind: 'race', distanceKm: run.distanceKm, timeSec: run.durationSec }
           : null
-        : manualSec && manualSec / refKm >= 150 && manualSec / refKm <= 720
-          ? { kind: "race", distanceKm: refKm, timeSec: manualSec }
+        : refSec && refSec / refKm >= 150 && refSec / refKm <= 720
+          ? { kind: 'race', distanceKm: refKm, timeSec: refSec }
           : null;
+  const p10 = currentLevel ? currentPace10k(currentLevel) : null;
 
-  const km = distance === "autre" ? (num(otherKm) ?? 0) : distance;
-  const kmOk = km >= 1 && km <= 100;
-
-  const allRaces = useMemo(
-    () =>
-      searchRaces(RACE_CALENDAR, {
-        query,
-        fromIso: start,
-        distanceKm: kmOk ? km : undefined,
-      }),
-    [query, start, km, kmOk],
+  const race: RaceEvent | undefined = RACE_CALENDAR.find((r) => r.id === raceId);
+  const minDate = addDays(start, 6);
+  const maxDate = addDays(start, MAX_WEEKS * 7 - 1);
+  const races = useMemo(
+    () => searchRaces(RACE_CALENDAR, { query, fromIso: addDays(minDate, -1) }).filter((r) => r.date <= maxDate),
+    [query, minDate, maxDate],
   );
-  const races = allRaces.filter((r) => weeksUntil(start, r.date) <= MAX_WEEKS);
-  const race: RaceEvent | undefined = RACE_CALENDAR.find(
-    (r) => r.id === raceId,
-  );
-  // Une course qui ne propose pas la distance visée n'est plus valable.
-  useEffect(() => {
-    if (race && kmOk && !race.distances.some((d) => sameKm(d, km)))
-      setRaceId(null);
-  }, [race, km, kmOk]);
-  const eventDate =
-    when === "race" && race
-      ? race.date
-      : addDays(start, (weeks - 1) * 7 + raceDow);
-  const planWeeks = Math.max(1, weeksUntil(start, eventDate));
+  const eventDate = when === 'race' ? (race?.date ?? null) : freeDate;
+  const planWeeks = eventDate ? Math.max(1, weeksUntil(start, eventDate)) : 12;
   const opts = { sessionsPerWeek: sessions, athlete };
 
-  const base =
-    currentLevel && kmOk
-      ? assessGoal(
-          { mode: "distance", sport: "running", distanceKm: km, eventDate },
-          currentLevel,
-          start,
-          opts,
-        )
+  // Distance de l'objectif : imposée par la course choisie, sinon par le préréglage ou le sur-mesure.
+  const presetKm = preset && preset !== 'custom' ? Number(Object.keys(PRESETS).find((k) => PRESETS[Number(k)].some((p) => p.id === preset))) : null;
+  const km = when === 'race' && raceKm ? raceKm : (presetKm ?? customKm);
+  const allowedKms = when === 'race' && race ? (raceKm ? [raceKm] : race.distances) : DISTANCES.map((d) => d.km);
+
+  const assessAt = (k: number, sec: number | undefined, n: SessionsPerWeek = sessions) =>
+    currentLevel && eventDate
+      ? assessGoal({ mode: sec ? 'chrono' : 'distance', sport: 'running', distanceKm: k, targetTimeSec: sec, eventDate }, currentLevel, start, { sessionsPerWeek: n, athlete })
       : null;
-  const tStep = base ? stepFor(base.predictedNowSec) : 30;
-  const bounds = base
-    ? {
-        min: roundTo(base.achievable.bestSec * 0.95, tStep),
-        max: roundTo(base.predictedNowSec * 1.3, tStep),
-      }
-    : null;
-  const targetSec = mode === "chrono" ? parseGoalTime(targetText, km) : null;
+  const boundsFor = (k: number) => {
+    const b = assessAt(k, undefined);
+    if (!b) return null;
+    const st = stepFor(b.predictedNowSec);
+    return { min: roundTo(b.achievable.bestSec * 0.95, st), max: roundTo(b.predictedNowSec * 1.3, st), now: b.predictedNowSec, likely: b.achievable.likelySec, suggestions: b.suggestions };
+  };
+  const bounds = boundsFor(km);
 
   const targetProblem = (() => {
-    if (mode !== "chrono" || !bounds) return null;
-    if (!targetText.trim()) return "Indique le temps que tu vises.";
-    if (!targetSec) return "Format attendu : 45:00, 1:45:00 ou 1h45.";
-    if (targetSec < bounds.min)
-      return `Trop rapide pour ton niveau en ${planWeeks} semaine${planWeeks > 1 ? "s" : ""}. Le plus rapide envisageable : ${formatTime(bounds.min)}.`;
-    if (targetSec > bounds.max)
-      return `Bien plus lent que ton niveau actuel (${formatTime(base!.predictedNowSec)}). Vise ${formatTime(bounds.max)} ou plus vite.`;
+    if (mode !== 'chrono' || !preset || !bounds) return null;
+    if (!targetSec) return 'Choisis le temps que tu vises.';
+    if (targetSec < bounds.min) return `Ce chrono demande un peu plus de ${planWeeks} semaines de préparation. Pour cette course, vise ${formatTime(bounds.min)} : tu iras chercher plus vite au prochain objectif !`;
+    if (targetSec > bounds.max) return `Tu vaux déjà mieux que ça ! Vise au moins ${formatTime(bounds.max)}.`;
     return null;
   })();
-  const fixTarget =
-    targetSec && bounds
-      ? targetSec < bounds.min
-        ? bounds.min
-        : targetSec > bounds.max
-          ? bounds.max
-          : null
-      : null;
-
-  const cleanTime = normalizeClockTime(startTime);
-  const timeProblem =
-    startTime.trim() && !cleanTime
-      ? "Heure de départ au format 8:30 ou 8h30."
-      : null;
+  const fixTarget = targetSec && bounds ? (targetSec < bounds.min ? bounds.min : targetSec > bounds.max ? bounds.max : null) : null;
   const daysOk = days.length === sessions;
 
-  const raceInfo =
-    when === "race" && race
-      ? {
-          name: race.name,
-          city: race.city,
-          startTime: cleanTime ?? race.startTime,
-        }
-      : cleanTime
-        ? {
-            name: `${distanceLabel(km)} du ${formatDateFr(eventDate, { day: "numeric", month: "long" })}`,
-            startTime: cleanTime,
-          }
-        : undefined;
+  const raceInfo = when === 'race' && race ? { name: race.name, city: race.city, startTime: startTime ?? race.startTime } : startTime ? { name: `${distanceLabel(km)} du ${eventDate ? formatDateFr(eventDate, { day: 'numeric', month: 'long' }) : ''}`, startTime } : undefined;
 
   const request: PlanRequest | null =
-    currentLevel &&
-    kmOk &&
-    !targetProblem &&
-    !timeProblem &&
-    eventDate > today &&
-    (when === "date" || race)
+    currentLevel && eventDate && preset && !targetProblem && daysOk
       ? {
-          goal: {
-            mode,
-            sport: "running",
-            distanceKm: km,
-            targetTimeSec: mode === "chrono" ? targetSec! : undefined,
-            eventDate,
-            race: raceInfo,
-          },
+          goal: { mode, sport: 'running', distanceKm: km, targetTimeSec: mode === 'chrono' ? targetSec! : undefined, eventDate, race: raceInfo },
           level: currentLevel,
           sessionsPerWeek: sessions,
           startDate: start,
@@ -363,138 +225,83 @@ export default function GoalScreen() {
           athlete,
         }
       : null;
-  const assessment = request
-    ? assessGoal(request.goal, request.level, start, opts)
-    : null;
-  const objLevel = objectiveLevel({
-    mode,
-    distanceKm: kmOk ? km : 10,
-    targetTimeSec: targetSec ?? undefined,
-  });
+  const assessment = request ? assessGoal(request.goal, request.level, start, opts) : null;
+  const objLevel = objectiveLevel({ mode, distanceKm: km, targetTimeSec: targetSec ?? undefined });
+  const perfLabel = refSource === 'estimate' ? 'Ton niveau' : 'Ta dernière performance';
 
-  const confidenceFor = (
-    k: number,
-    sec: number | undefined,
-    n: SessionsPerWeek = sessions,
-  ) =>
-    currentLevel
-      ? assessGoal(
-          {
-            mode: sec ? "chrono" : "distance",
-            sport: "running",
-            distanceKm: k,
-            targetTimeSec: sec,
-            eventDate,
-          },
-          currentLevel,
-          start,
-          { sessionsPerWeek: n, athlete },
-        ).confidence
-      : null;
-
-  // ---------- Validation des étapes ----------
-  const stepProblem = (i: number): string | null => {
-    if (i === 0) return weightError(weightKg) ?? heightError(heightCm);
-    if (i === 1) {
-      if (refSource === "run" && !run)
-        return "Choisis une de tes courses, ou saisis un chrono.";
-      if (refSource === "manual" && !manualSec)
-        return "Indique ton chrono, par exemple 52:30.";
-      if (refSource === "manual" && !currentLevel)
-        return "Ce chrono semble impossible : vérifie-le.";
-      return null;
+  // ---------- Validation ----------
+  const problemOf = (s: Step): string | null => {
+    if (s === 'perf') {
+      if (refSource === 'run' && !run) return 'Choisis une de tes courses, ou indique un chrono.';
+      if (refSource === 'manual' && !refSec) return 'Choisis ton chrono.';
+      if (refSource === 'manual' && !currentLevel) return 'Ce chrono semble impossible : vérifie-le.';
     }
-    if (i === 2) {
-      if (!kmOk) return "Indique une distance entre 1 et 100 km.";
+    if (s === 'course') {
+      if (when === 'race' && !race) return 'Choisis ta course, ou passe sur « Je choisis la date ».';
+      if (when === 'race' && !raceKm) return 'Choisis ta distance.';
+      if (when === 'date' && !freeDate) return 'Choisis la date de ton objectif dans le calendrier.';
+    }
+    if (s === 'rythme' && !daysOk) return `Choisis ${sessions} jour${sessions > 1 ? 's' : ''} d’entraînement.`;
+    if (s === 'objectif') {
+      if (!preset) return 'Choisis ton objectif.';
       return targetProblem;
     }
-    if (i === 3) {
-      if (when === "race" && !race)
-        return "Choisis ta course, ou passe sur « Je choisis la date ».";
-      if (eventDate <= today) return "Le jour J doit être dans le futur.";
-      return timeProblem;
-    }
-    if (i === 4)
-      return daysOk
-        ? null
-        : `Choisis ${sessions} jour${sessions > 1 ? "s" : ""} d’entraînement.`;
-    return request
-      ? null
-      : (targetProblem ?? "Vérifie les étapes précédentes.");
+    if (s === 'recap' && !request) return targetProblem ?? 'Vérifie les étapes précédentes.';
+    return null;
   };
-  const problem = stepProblem(step);
+  const problem = problemOf(STEPS[step]);
 
   const next = () => {
     setTried(true);
     if (problem) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(
-        () => {},
-      );
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
       return;
     }
     Haptics.selectionAsync().catch(() => {});
-    if (
-      step === 0 &&
-      ((weightKg ?? undefined) !== saved.weightKg ||
-        (heightCm ?? undefined) !== saved.heightCm)
-    ) {
+    touched.current = true;
+    if (STEPS[step] === 'toi' && ((weightKg ?? undefined) !== saved.weightKg || (heightCm ?? undefined) !== saved.heightCm)) {
       saveAthlete({ weightKg, heightCm }).catch(() => {});
     }
-    // À l'arrivée sur l'objectif : on pré-remplit le chrono réaliste si rien n'est choisi.
-    if (step === 1 && !targetText && base)
-      setTargetText(formatTime(base.achievable.likelySec));
     setStep((s) => Math.min(STEPS.length - 1, s + 1));
   };
 
-  const pickPreset = (p: (typeof PRESETS)[number]) => {
+  const pickRace = (r: RaceEvent) => {
+    setRaceId(r.id);
+    setRaceKm(r.distances.length === 1 ? r.distances[0] : null);
+    if (r.startTime) setStartTime(r.startTime);
+    setPreset(null);
+  };
+  const pickPreset = (k: number, p: { id: string; sec?: number }) => {
     Haptics.selectionAsync().catch(() => {});
     setPreset(p.id);
-    setDistance(p.km);
-    setMode(p.sec ? "chrono" : "distance");
-    if (p.sec) setTargetText(formatTime(p.sec));
-    if (
-      raceId &&
-      !RACE_CALENDAR.find((r) => r.id === raceId)?.distances.some((d) =>
-        sameKm(d, p.km),
-      )
-    )
-      setRaceId(null);
+    setMode(p.sec ? 'chrono' : 'distance');
+    setTargetSec(p.sec ?? null);
+    setCustomKm(k);
   };
-  const pickCustom = () => {
-    // Deuxième appui : on referme (et on désélectionne).
-    if (preset === "custom") {
-      setPreset(null);
-      return;
-    }
-    setPreset("custom");
-    if (base && !targetText)
-      setTargetText(formatTime(base.achievable.likelySec));
+  const toggleCustom = () => {
+    if (preset === 'custom') return setPreset(null);
+    setPreset('custom');
+    setCustomKm(allowedKms[0]);
+    const b = boundsFor(allowedKms[0]);
+    setMode('chrono');
+    setTargetSec(b ? b.likely : null);
   };
   const pickSessions = (n: SessionsPerWeek) => {
     setSessions(n);
     setDays(DAY_SETS[n]);
   };
-  const toggleDay = (d: number) =>
-    setDays((cur) =>
-      cur.includes(d)
-        ? cur.filter((x) => x !== d)
-        : [...cur, d].slice(-sessions),
-    );
+  const toggleDay = (d: number) => setDays((cur) => (cur.includes(d) ? cur.filter((x) => x !== d) : [...cur, d].slice(-sessions)));
 
   const submit = async () => {
     setTried(true);
-    if (!request || saving || !daysOk) return;
+    if (!request || saving) return;
     setSaving(true);
     setError(null);
     try {
       setCreated(await createPlan(request));
     } catch (e) {
-      const code = String((e as { message?: string })?.message ?? "");
-      setError(
-        code.includes("too_many_active_plans")
-          ? `Tu as déjà ${MAX_ACTIVE_PLANS} objectifs en cours.`
-          : "Le plan n’a pas pu être créé. Vérifie ta connexion et réessaie.",
-      );
+      const code = String((e as { message?: string })?.message ?? '');
+      setError(code.includes('too_many_active_plans') ? `Tu as déjà ${MAX_ACTIVE_PLANS} objectifs en cours.` : 'Le plan n’a pas pu être créé. Vérifie ta connexion et réessaie.');
     } finally {
       setSaving(false);
     }
@@ -502,161 +309,98 @@ export default function GoalScreen() {
 
   const full = plans.length >= MAX_ACTIVE_PLANS;
   const isLast = step === STEPS.length - 1;
+  const labels: Record<Step, string> = { toi: 'Toi', perf: refSource === 'estimate' ? 'Ton niveau' : 'Dernière perf', course: 'Ta course', rythme: 'Ton rythme', objectif: 'Ton objectif', recap: 'Récap' };
 
-  // ---------- Rendu ----------
+  // ---------- Félicitations ----------
   if (created) {
     const n = request?.sessionsPerWeek ?? sessions;
     return (
       <>
         <Stack.Screen options={{ headerShown: false, gestureEnabled: false }} />
         <GoalCelebration
-          title={
-            raceInfo?.name
-              ? `Cap sur ${raceInfo.name} !`
-              : "Ton plan est prêt !"
-          }
+          title={raceInfo?.name && when === 'race' ? `Cap sur ${raceInfo.name} !` : 'Ton plan est prêt !'}
           subtitle={
-            mode === "chrono" && targetSec
+            mode === 'chrono' && targetSec
               ? `${distanceLabel(km)} en ${formatTime(targetSec)} : chaque séance te rapproche de ton chrono.`
               : `Objectif : finir ${distanceLabel(km)}. Une séance après l’autre, tu vas y arriver.`
           }
           stats={[
-            {
-              icon: "calendar",
-              label: `Jour J : ${formatDateFr(eventDate, { weekday: "long", day: "numeric", month: "long" })} (J-${daysBetween(today, eventDate)})`,
-            },
-            {
-              icon: "repeat",
-              label: `${planWeeks} semaine${planWeeks > 1 ? "s" : ""} · ${n} séance${n > 1 ? "s" : ""} par semaine`,
-            },
-            ...(assessment
-              ? [
-                  {
-                    icon: "speedometer" as const,
-                    label: `${assessment.confidence} % de chances : ${assessment.title.toLowerCase()}`,
-                  },
-                ]
-              : []),
-            {
-              icon: "flag",
-              label: `Début du plan : ${formatDateFr(start, { weekday: "long", day: "numeric", month: "long" })}`,
-            },
+            ...(eventDate ? [{ icon: 'calendar' as const, label: `Jour J : ${formatDateFr(eventDate, { weekday: 'long', day: 'numeric', month: 'long' })} (J-${daysBetween(today, eventDate)})` }] : []),
+            { icon: 'repeat', label: `${planWeeks} semaine${planWeeks > 1 ? 's' : ''} · ${n} séance${n > 1 ? 's' : ''} par semaine` },
+            ...(assessment ? [{ icon: 'speedometer' as const, label: assessment.title }] : []),
+            { icon: 'flag', label: `Début du plan : ${formatDateFr(start, { weekday: 'long', day: 'numeric', month: 'long' })}` },
           ]}
           onDone={() => {
+            const id = created;
             router.dismiss();
-            router.push({ pathname: "/plan/[id]", params: { id: created } });
+            setTimeout(() => router.push({ pathname: '/plan/[id]', params: { id } }), 50);
           }}
         />
       </>
     );
   }
 
+  // ---------- Rendu ----------
+  const s = STEPS[step];
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: t.background }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={60}
-    >
-      {/* Progression */}
+    <View style={{ flex: 1, backgroundColor: t.background }}>
       <View style={[styles.progressWrap, { backgroundColor: t.background }]}>
         <View style={styles.progress}>
-          {STEPS.map((s, i) => (
+          {STEPS.map((st, i) => (
             <Pressable
-              key={s}
+              key={st}
               accessibilityRole="button"
-              accessibilityLabel={`Étape ${i + 1} : ${s}`}
+              accessibilityLabel={`Étape ${i + 1} : ${labels[st]}`}
               disabled={i > step}
-              onPress={() => setStep(i)}
+              onPress={() => {
+                touched.current = true;
+                setStep(i);
+              }}
               hitSlop={6}
-              style={[
-                styles.seg,
-                { backgroundColor: i <= step ? t.accent : t.line },
-              ]}
+              style={[styles.seg, { backgroundColor: i <= step ? t.accent : t.line }]}
             />
           ))}
         </View>
         <Txt variant="caption" muted>
-          Étape {step + 1} sur {STEPS.length} · {STEPS[step]}
+          Étape {step + 1} sur {STEPS.length} · {labels[s]}
         </Txt>
       </View>
 
-      <ScrollView
-        ref={scroll}
-        contentContainerStyle={styles.page}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-      >
-        {step === 0 && (
+      <ScrollView ref={scroll} contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+        {s === 'toi' && (
           <>
-            <Heading
-              title="Parlons de toi"
-              sub="Ton âge et ta corpulence ajustent la charge d’entraînement et l’estimation de ta progression. C’est facultatif."
-            />
+            <Heading title="Parlons de toi" sub="Ton âge et ta corpulence ajustent la charge d’entraînement et l’estimation de ta progression. C’est facultatif." />
             <Card>
               <View style={styles.row}>
-                <Field
-                  label="Poids"
-                  unit="kg"
-                  value={weight}
-                  onChange={setWeight}
-                  keyboardType="decimal-pad"
-                  placeholder="—"
-                  flex
-                  big
-                />
-                <Field
-                  label="Taille"
-                  unit="cm"
-                  value={height}
-                  onChange={setHeight}
-                  keyboardType="number-pad"
-                  placeholder="—"
-                  flex
-                  big
-                />
+                <NumberPicker label="Poids" unit="kg" value={weightKg} onChange={setWeightKg} min={35} max={160} initial={70} flex />
+                <NumberPicker label="Taille" unit="cm" value={heightCm} onChange={setHeightCm} min={130} max={215} initial={175} flex />
               </View>
               <View style={[styles.infoRow, { backgroundColor: t.surfaceAlt }]}>
-                <Ionicons
-                  name="person-outline"
-                  size={16}
-                  color={t.textSecondary}
-                />
+                <Ionicons name="person-outline" size={16} color={t.textSecondary} />
                 <Txt variant="caption" muted style={{ flex: 1 }}>
-                  {saved.age
-                    ? `${saved.age} ans, d’après ta date de naissance.`
-                    : "Ton âge vient de ta date de naissance (compte Foulée)."}
+                  {saved.age ? `${saved.age} ans, d’après ta date de naissance.` : 'Ton âge vient de ta date de naissance (compte Foulée).'}
                 </Txt>
               </View>
             </Card>
-            <Txt variant="caption" muted style={{ textAlign: "center" }}>
-              Ces données restent privées et servent uniquement à doser ton
-              plan.
+            <Txt variant="caption" muted style={{ textAlign: 'center' }}>
+              Ces données restent privées et servent uniquement à doser ton plan.
             </Txt>
           </>
         )}
 
-        {step === 1 && (
+        {s === 'perf' && (
           <>
-            <Heading
-              title="Ta dernière performance"
-              sub="Le point de départ de tout le plan : tes allures sont calculées à partir de là."
-            />
+            <Heading title="Ta dernière performance" sub="Le point de départ de tout le plan : tes allures sont calculées à partir de là." />
             <Segment
-              options={[
-                ...(recent.length
-                  ? [{ value: "run", label: "Mes courses" }]
-                  : []),
-                { value: "manual", label: "Un chrono" },
-                { value: "estimate", label: "Pas de chrono" },
-              ]}
+              options={[...(recent.length ? [{ value: 'run', label: 'Mes courses' }] : []), { value: 'manual', label: 'Un chrono' }, { value: 'estimate', label: 'Pas de chrono' }]}
               value={refSource}
               onChange={(v) => {
                 setRefSource(v as RefSource);
-                if (v === "run" && !runId) setRunId(recent[0]?.id ?? null);
+                if (v === 'run' && !runId) setRunId(recent[0]?.id ?? null);
               }}
             />
 
-            {refSource === "run" && (
+            {refSource === 'run' && (
               <Card>
                 <Txt variant="caption" muted>
                   Tes dernières courses
@@ -669,92 +413,44 @@ export default function GoalScreen() {
                       accessibilityRole="radio"
                       accessibilityState={{ selected: on }}
                       onPress={() => setRunId(r.id)}
-                      style={[
-                        styles.option,
-                        {
-                          backgroundColor: on ? t.accentSoft : t.surfaceAlt,
-                          borderColor: on ? t.accent : "transparent",
-                        },
-                      ]}
-                    >
+                      style={[styles.option, { backgroundColor: on ? t.accentSoft : t.surfaceAlt, borderColor: on ? t.accent : 'transparent' }]}>
                       <View style={{ flex: 1 }}>
-                        <Txt
-                          style={{ fontWeight: "600" }}
-                          color={on ? t.accent : t.text}
-                        >
+                        <Txt style={{ fontWeight: '600' }} color={on ? t.accent : t.text}>
                           {kmLabel(r.distanceKm)} en {formatTime(r.durationSec)}
                         </Txt>
                         <Txt variant="caption" muted>
-                          {formatDateFr(r.date, {
-                            weekday: "short",
-                            day: "numeric",
-                            month: "short",
-                          })}{" "}
-                          · {formatPace(r.durationSec / r.distanceKm)} /km
+                          {formatDateFr(r.date, { weekday: 'short', day: 'numeric', month: 'short' })} · {formatPace(r.durationSec / r.distanceKm)} /km
                         </Txt>
                       </View>
-                      <Ionicons
-                        name={on ? "radio-button-on" : "radio-button-off"}
-                        size={20}
-                        color={on ? t.accent : t.textSecondary}
-                      />
+                      <Ionicons name={on ? 'radio-button-on' : 'radio-button-off'} size={20} color={on ? t.accent : t.textSecondary} />
                     </Pressable>
                   );
                 })}
-                <Txt variant="caption" muted>
-                  Prends ta course la plus représentative : un effort soutenu
-                  plutôt qu’un footing tranquille.
-                </Txt>
               </Card>
             )}
 
-            {refSource === "manual" && (
+            {refSource === 'manual' && (
               <Card>
                 <Txt variant="caption" muted>
                   Distance
                 </Txt>
                 <View style={styles.wrap}>
-                  {[5, 10, 21.0975, 42.195].map((d) => (
-                    <Pill
-                      key={d}
-                      label={
-                        d === 21.0975
-                          ? "Semi"
-                          : d === 42.195
-                            ? "Marathon"
-                            : `${d} km`
-                      }
-                      active={refKm === d}
-                      onPress={() => setRefKm(d)}
-                    />
+                  {DISTANCES.map((d) => (
+                    <Pill key={d.km} label={d.km === 21.0975 ? 'Semi' : d.label} active={refKm === d.km} onPress={() => setRefKm(d.km)} />
                   ))}
                 </View>
-                <TimeBox
+                <DurationPicker
                   label="Ton chrono"
-                  value={refTime}
-                  onChange={setRefTime}
-                  placeholder={
-                    refKm === 5
-                      ? "27:30"
-                      : refKm === 10
-                        ? "55:00"
-                        : refKm < 30
-                          ? "2:05:00"
-                          : "4:20:00"
-                  }
-                  hint={
-                    manualSec
-                      ? `${formatPace(manualSec / refKm)} /km`
-                      : "ex. 52:30 · 1:58:00 · 1h58"
-                  }
+                  value={refSec}
+                  onChange={setRefSec}
+                  initial={refKm === 5 ? 1680 : refKm === 10 ? 3300 : refKm < 30 ? 7500 : 15600}
+                  withHours={refKm > 15}
+                  hint={refSec ? `${formatPace(refSec / refKm)} /km · une course ou un test de moins de 3 mois` : 'Une course ou un test de moins de 3 mois.'}
                 />
-                <Txt variant="caption" muted>
-                  Une course ou un test de moins de 3 mois.
-                </Txt>
               </Card>
             )}
 
-            {refSource === "estimate" && (
+            {refSource === 'estimate' && (
               <View style={styles.grid}>
                 {LEVELS.map((l) => {
                   const on = level === l.id;
@@ -764,24 +460,9 @@ export default function GoalScreen() {
                       accessibilityRole="radio"
                       accessibilityState={{ selected: on }}
                       onPress={() => setLevel(l.id)}
-                      style={[
-                        styles.tile,
-                        styles.shadow,
-                        {
-                          backgroundColor: on ? t.accentSoft : t.surface,
-                          borderColor: on ? t.accent : "transparent",
-                        },
-                      ]}
-                    >
-                      <Ionicons
-                        name={l.icon}
-                        size={20}
-                        color={on ? t.accent : t.textSecondary}
-                      />
-                      <Txt
-                        style={{ fontWeight: "600" }}
-                        color={on ? t.accent : t.text}
-                      >
+                      style={[styles.tile, styles.shadow, { backgroundColor: on ? t.accentSoft : t.surface, borderColor: on ? t.accent : 'transparent' }]}>
+                      <Ionicons name={l.icon} size={20} color={on ? t.accent : t.textSecondary} />
+                      <Txt style={{ fontWeight: '600' }} color={on ? t.accent : t.text}>
                         {l.label}
                       </Txt>
                       <Txt variant="caption" muted numberOfLines={2}>
@@ -793,250 +474,35 @@ export default function GoalScreen() {
               </View>
             )}
 
-            {currentLevel && (
+            {p10 && (
               <View style={[styles.infoRow, { backgroundColor: t.accentSoft }]}>
-                <Ionicons
-                  name="speedometer-outline"
-                  size={16}
-                  color={t.accent}
-                />
-                <Txt
-                  variant="caption"
-                  color={t.accent}
-                  style={{ flex: 1, fontWeight: "600" }}
-                >
-                  Ton niveau aujourd’hui ≈ 10 km en{" "}
-                  {formatTime(
-                    riegel(currentPace10k(currentLevel) * 10, 10, 10),
-                  )}{" "}
-                  · semi en{" "}
-                  {formatTime(
-                    riegel(currentPace10k(currentLevel) * 10, 10, 21.0975),
-                  )}
+                <Ionicons name="speedometer-outline" size={16} color={t.accent} />
+                <Txt variant="caption" color={t.accent} style={{ flex: 1, fontWeight: '600' }}>
+                  Ton niveau aujourd’hui ≈ 10 km en {formatTime(p10 * 10)} · semi en {formatTime(riegel(p10 * 10, 10, 21.0975))}
                 </Txt>
               </View>
             )}
           </>
         )}
 
-        {step === 2 && (
+        {s === 'course' && (
           <>
-            <Heading
-              title="Quel est ton objectif ?"
-              sub={`Chances estimées pour une course dans ${planWeeks} semaines, avec ${sessions} séance${sessions > 1 ? "s" : ""} par semaine. Tu ajusteras ensuite.`}
-            />
-            <View style={styles.grid}>
-              {PRESETS.map((p) => {
-                const on = preset === p.id;
-                const conf = confidenceFor(p.km, p.sec);
-                const lvl = objectiveLevel({
-                  mode: p.sec ? "chrono" : "distance",
-                  distanceKm: p.km,
-                  targetTimeSec: p.sec,
-                });
-                return (
-                  <Pressable
-                    key={p.id}
-                    accessibilityRole="radio"
-                    accessibilityLabel={`${p.title} ${p.sub}`}
-                    accessibilityState={{ selected: on }}
-                    onPress={() => pickPreset(p)}
-                    style={({ pressed }) => [
-                      styles.preset,
-                      styles.shadow,
-                      {
-                        backgroundColor: on ? t.accentSoft : t.surface,
-                        borderColor: on ? t.accent : "transparent",
-                        transform: [{ scale: pressed ? 0.98 : 1 }],
-                      },
-                    ]}
-                  >
-                    <View style={styles.rowBetween}>
-                      <LevelBars level={lvl} />
-                      {conf != null && <ConfBadge c={conf} />}
-                    </View>
-                    <Txt
-                      style={styles.presetTitle}
-                      color={on ? t.accent : t.text}
-                    >
-                      {p.title}
-                    </Txt>
-                    <Txt
-                      style={{ fontWeight: "600" }}
-                      color={on ? t.accent : t.textSecondary}
-                    >
-                      {p.sub}
-                    </Txt>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            <Pressable
-              accessibilityRole="radio"
-              accessibilityState={{ selected: preset === "custom" }}
-              onPress={pickCustom}
-              style={[
-                styles.option,
-                styles.shadow,
-                {
-                  backgroundColor:
-                    preset === "custom" ? t.accentSoft : t.surface,
-                  borderColor: preset === "custom" ? t.accent : "transparent",
-                },
-              ]}
-            >
-              <Ionicons name="options-outline" size={20} color={t.accent} />
-              <Txt style={{ fontWeight: "600", flex: 1 }} color={t.accent}>
-                Objectif sur mesure
-              </Txt>
-              <Ionicons
-                name={preset === "custom" ? "chevron-up" : "chevron-down"}
-                size={16}
-                color={t.accent}
-              />
-            </Pressable>
-
-            {preset === "custom" && (
-              <Card>
-                <Segment
-                  options={[
-                    {
-                      value: "chrono",
-                      label: "Un chrono",
-                      icon: "stopwatch-outline",
-                    },
-                    { value: "distance", label: "Finir", icon: "flag-outline" },
-                  ]}
-                  value={mode}
-                  onChange={(v) => setMode(v as GoalMode)}
-                />
-                <View style={styles.wrap}>
-                  {DISTANCES.map((d) => (
-                    <Pill
-                      key={d.km}
-                      label={d.label}
-                      active={distance === d.km}
-                      onPress={() => setDistance(d.km)}
-                    />
-                  ))}
-                  <Pill
-                    label="Autre"
-                    active={distance === "autre"}
-                    onPress={() => setDistance("autre")}
-                  />
-                </View>
-                {distance === "autre" && (
-                  <Field
-                    label="Distance"
-                    unit="km"
-                    value={otherKm}
-                    onChange={setOtherKm}
-                    keyboardType="decimal-pad"
-                  />
-                )}
-                {mode === "chrono" && (
-                  <>
-                    <TimeBox
-                      label="Temps visé"
-                      value={targetText}
-                      onChange={(v) => {
-                        setTargetText(v);
-                      }}
-                      placeholder="45:00"
-                      hint={
-                        targetSec && kmOk
-                          ? `${formatPace(targetSec / km)} /km${base ? ` · niveau actuel ≈ ${formatTime(base.predictedNowSec)}` : ""}`
-                          : "ex. 45:00 · 1:45:00 · 1h45"
-                      }
-                      error={!!targetProblem && tried}
-                    />
-                    {base && (
-                      <View style={styles.suggestRow}>
-                        {base.suggestions.map((s) => {
-                          const on = targetSec === s.timeSec;
-                          const c = confidenceFor(km, s.timeSec);
-                          return (
-                            <Pressable
-                              key={s.label}
-                              accessibilityRole="button"
-                              accessibilityLabel={`${s.label} : ${formatTime(s.timeSec)}`}
-                              onPress={() =>
-                                setTargetText(formatTime(s.timeSec))
-                              }
-                              style={[
-                                styles.suggest,
-                                {
-                                  backgroundColor: on
-                                    ? t.accentSoft
-                                    : t.surfaceAlt,
-                                  borderColor: on ? t.accent : "transparent",
-                                },
-                              ]}
-                            >
-                              <Txt
-                                variant="caption"
-                                color={on ? t.accent : t.textSecondary}
-                                style={{ fontWeight: "600" }}
-                              >
-                                {s.label}
-                              </Txt>
-                              <Txt style={styles.suggestTime}>
-                                {formatTime(s.timeSec)}
-                              </Txt>
-                              {c != null && <ConfBadge c={c} small />}
-                            </Pressable>
-                          );
-                        })}
-                      </View>
-                    )}
-                  </>
-                )}
-              </Card>
-            )}
-
-            {targetProblem && preset && (tried || preset !== "custom") ? (
-              <Notice
-                text={targetProblem}
-                fix={fixTarget}
-                onFix={(v) => setTargetText(formatTime(v))}
-              />
-            ) : null}
-          </>
-        )}
-
-        {step === 3 && (
-          <>
-            <Heading
-              title="Quand est ta course ?"
-              sub="Choisis une course officielle, ou fixe simplement la date de ton défi."
-            />
+            <Heading title="Quand est ta course ?" sub="Choisis une course officielle, ou la date de ton défi dans le calendrier." />
             <Segment
               options={[
-                {
-                  value: "race",
-                  label: "Une course officielle",
-                  icon: "trophy-outline",
-                },
-                {
-                  value: "date",
-                  label: "Je choisis la date",
-                  icon: "calendar-outline",
-                },
+                { value: 'race', label: 'Une course officielle', icon: 'trophy-outline' },
+                { value: 'date', label: 'Je choisis la date', icon: 'calendar-outline' },
               ]}
               value={when}
-              onChange={(v) => setWhen(v as When)}
+              onChange={(v) => {
+                setWhen(v as When);
+                setPreset(null);
+              }}
             />
 
-            {when === "race" ? (
+            {when === 'race' ? (
               <>
-                <View
-                  style={[
-                    styles.search,
-                    { backgroundColor: t.surface },
-                    styles.shadow,
-                  ]}
-                >
+                <View style={[styles.search, styles.shadow, { backgroundColor: t.surface }]}>
                   <Ionicons name="search" size={18} color={t.textSecondary} />
                   <TextInput
                     accessibilityLabel="Rechercher une course"
@@ -1050,79 +516,36 @@ export default function GoalScreen() {
                 </View>
                 {races.length === 0 ? (
                   <Card>
-                    <Txt style={{ fontWeight: "600" }}>
-                      Aucune course trouvée{" "}
-                      {kmOk ? `sur ${distanceLabel(km)}` : ""}
-                    </Txt>
+                    <Txt style={{ fontWeight: '600' }}>Aucune course trouvée</Txt>
                     <Txt variant="caption" muted>
-                      Notre calendrier s’enrichit chaque semaine. En attendant,
-                      choisis la date toi-même et donne le nom de ta course.
+                      Le calendrier s’enrichit régulièrement. En attendant, choisis simplement la date de ta course.
                     </Txt>
-                    <Button
-                      kind="secondary"
-                      small
-                      icon="calendar-outline"
-                      label="Je choisis la date"
-                      onPress={() => setWhen("date")}
-                    />
+                    <Button kind="secondary" small icon="calendar-outline" label="Je choisis la date" onPress={() => setWhen('date')} />
                   </Card>
                 ) : (
                   races.map((r) => {
                     const on = r.id === raceId;
-                    const w = weeksUntil(start, r.date);
                     return (
                       <Pressable
                         key={r.id}
                         accessibilityRole="radio"
                         accessibilityState={{ selected: on }}
-                        onPress={() => {
-                          setRaceId(r.id);
-                          if (r.startTime) setStartTime(r.startTime);
-                        }}
-                        style={[
-                          styles.raceRow,
-                          styles.shadow,
-                          {
-                            backgroundColor: on ? t.accentSoft : t.surface,
-                            borderColor: on ? t.accent : "transparent",
-                          },
-                        ]}
-                      >
-                        <View
-                          style={[
-                            styles.dateBadge,
-                            { backgroundColor: on ? t.accent : t.surfaceAlt },
-                          ]}
-                        >
-                          <Txt
-                            style={styles.dateDay}
-                            color={on ? t.accentText : t.text}
-                          >
+                        onPress={() => pickRace(r)}
+                        style={[styles.raceRow, styles.shadow, { backgroundColor: on ? t.accentSoft : t.surface, borderColor: on ? t.accent : 'transparent' }]}>
+                        <View style={[styles.dateBadge, { backgroundColor: on ? t.accent : t.surfaceAlt }]}>
+                          <Txt style={styles.dateDay} color={on ? t.accentText : t.text}>
                             {Number(r.date.slice(8, 10))}
                           </Txt>
-                          <Txt
-                            variant="caption"
-                            color={on ? t.accentText : t.textSecondary}
-                          >
-                            {formatDateFr(r.date, { month: "short" }).replace(
-                              ".",
-                              "",
-                            )}
+                          <Txt variant="caption" color={on ? t.accentText : t.textSecondary}>
+                            {formatDateFr(r.date, { month: 'short' }).replace('.', '')}
                           </Txt>
                         </View>
                         <View style={{ flex: 1, gap: 2 }}>
-                          <Txt
-                            style={{ fontWeight: "600" }}
-                            color={on ? t.accent : t.text}
-                          >
+                          <Txt style={{ fontWeight: '600' }} color={on ? t.accent : t.text}>
                             {r.name}
                           </Txt>
                           <Txt variant="caption" muted>
-                            {r.city} ·{" "}
-                            {r.distances
-                              .map((d) => distanceLabel(d))
-                              .join(", ")}{" "}
-                            · {w} sem.
+                            {r.city} · {r.distances.map((d) => distanceLabel(d)).join(', ')} · {weeksUntil(start, r.date)} sem.
                           </Txt>
                           {!r.confirmed && (
                             <Txt variant="caption" color={t.warn}>
@@ -1130,100 +553,63 @@ export default function GoalScreen() {
                             </Txt>
                           )}
                         </View>
-                        <Ionicons
-                          name={on ? "radio-button-on" : "radio-button-off"}
-                          size={20}
-                          color={on ? t.accent : t.textSecondary}
-                        />
+                        <Ionicons name={on ? 'radio-button-on' : 'radio-button-off'} size={20} color={on ? t.accent : t.textSecondary} />
                       </Pressable>
                     );
                   })
                 )}
+                {race && race.distances.length > 1 && (
+                  <Card>
+                    <Txt variant="caption" muted>
+                      Ta distance
+                    </Txt>
+                    <View style={styles.wrap}>
+                      {race.distances.map((d) => (
+                        <Pill key={d} label={distanceLabel(d)} active={raceKm != null && sameKm(raceKm, d)} onPress={() => setRaceKm(d)} />
+                      ))}
+                    </View>
+                  </Card>
+                )}
               </>
             ) : (
               <Card>
-                <View
-                  style={[styles.stepper, { backgroundColor: t.surfaceAlt }]}
-                >
-                  <RoundBtn
-                    icon="remove"
-                    label="Une semaine plus tôt"
-                    disabled={weeks <= 1}
-                    onPress={() => setWeeks((w) => Math.max(1, w - 1))}
-                  />
-                  <View style={{ alignItems: "center", flex: 1 }}>
-                    <Txt style={styles.stepValue}>{weeks}</Txt>
-                    <Txt variant="caption" muted>
-                      semaine{weeks > 1 ? "s" : ""} de préparation
-                    </Txt>
-                  </View>
-                  <RoundBtn
-                    icon="add"
-                    label="Une semaine plus tard"
-                    disabled={weeks >= MAX_WEEKS}
-                    onPress={() => setWeeks((w) => Math.min(MAX_WEEKS, w + 1))}
-                  />
-                </View>
-                <Txt variant="caption" muted>
-                  Jour de la course
-                </Txt>
-                <DayPicker selected={[raceDow]} onToggle={setRaceDow} />
+                <CalendarPicker value={freeDate} onChange={setFreeDate} min={minDate} max={maxDate} />
               </Card>
             )}
 
-            {(when === "date" || race) && (
+            {eventDate && (
               <Card>
                 <View style={styles.rowBetween}>
                   <View style={{ flex: 1 }}>
                     <Txt variant="caption" muted>
                       Jour J
                     </Txt>
-                    <Txt style={{ fontWeight: "700", fontSize: 17 }}>
-                      {formatDateFr(eventDate, {
-                        weekday: "long",
-                        day: "numeric",
-                        month: "long",
-                        year: "numeric",
-                      })}
+                    <Txt style={{ fontWeight: '700', fontSize: 17 }}>{formatDateFr(eventDate, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</Txt>
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Txt variant="caption" color={t.accent} style={{ fontWeight: '700' }}>
+                      J-{daysBetween(today, eventDate)}
+                    </Txt>
+                    <Txt variant="caption" muted>
+                      {planWeeks} semaine{planWeeks > 1 ? 's' : ''} de prépa
                     </Txt>
                   </View>
-                  <Txt
-                    variant="caption"
-                    color={t.accent}
-                    style={{ fontWeight: "600" }}
-                  >
-                    J-{daysBetween(today, eventDate)}
-                  </Txt>
                 </View>
-                <Field
-                  label="Heure de départ (facultatif)"
-                  value={startTime}
-                  onChange={setStartTime}
-                  keyboardType="numbers-and-punctuation"
-                  placeholder="8:30"
-                />
+                <ClockPicker label="Heure de départ (facultatif)" value={startTime} onChange={setStartTime} />
                 <Txt variant="caption" muted>
-                  Elle sert à caler ton petit-déjeuner et ton échauffement la
-                  semaine de course.
+                  Elle sert à caler ton petit-déjeuner et ton échauffement la semaine de course.
                 </Txt>
               </Card>
             )}
           </>
         )}
 
-        {step === 4 && (
+        {s === 'rythme' && (
           <>
-            <Heading
-              title="Ton rythme"
-              sub="Combien de séances peux-tu vraiment faire par semaine ? Mieux vaut 3 séances tenues que 5 abandonnées."
-            />
+            <Heading title="Ton rythme" sub="Combien de séances peux-tu vraiment faire par semaine ? Mieux vaut 3 séances tenues que 5 abandonnées." />
             <Card>
               <Segment
-                options={([1, 2, 3, 4, 5] as SessionsPerWeek[]).map((n) => ({
-                  value: String(n),
-                  label: String(n),
-                  a11y: `${n} séance${n > 1 ? "s" : ""} par semaine`,
-                }))}
+                options={([1, 2, 3, 4, 5] as SessionsPerWeek[]).map((n) => ({ value: String(n), label: String(n), a11y: `${n} séance${n > 1 ? 's' : ''} par semaine` }))}
                 value={String(sessions)}
                 onChange={(v) => pickSessions(Number(v) as SessionsPerWeek)}
               />
@@ -1231,63 +617,154 @@ export default function GoalScreen() {
                 <Txt variant="caption" muted>
                   Tes jours d’entraînement
                 </Txt>
-                <Txt
-                  variant="caption"
-                  color={daysOk ? t.ok : t.warn}
-                  style={{ fontWeight: "600" }}
-                >
+                <Txt variant="caption" color={daysOk ? t.ok : t.warn} style={{ fontWeight: '600' }}>
                   {days.length}/{sessions}
                 </Txt>
               </View>
-              <DayPicker selected={days} onToggle={toggleDay} />
+              <DayPicker selected={days} onToggle={toggleDay} race={eventDate ? dowOf(eventDate) : undefined} />
+              {eventDate && (
+                <Txt variant="caption" muted>
+                  Le drapeau marque le jour de ta course ({DAY_NAMES[dowOf(eventDate)]}).
+                </Txt>
+              )}
             </Card>
-            {request && (
-              <View style={styles.wrap}>
-                {([1, 2, 3, 4, 5] as SessionsPerWeek[]).map((n) => {
-                  const c = confidenceFor(
-                    km,
-                    mode === "chrono" ? (targetSec ?? undefined) : undefined,
-                    n,
-                  );
-                  return c == null ? null : (
-                    <Pressable
-                      key={n}
-                      accessibilityRole="button"
-                      onPress={() => pickSessions(n)}
-                      style={[
-                        styles.miniConf,
-                        {
-                          backgroundColor:
-                            n === sessions ? t.accentSoft : t.surfaceAlt,
-                        },
-                      ]}
-                    >
-                      <Txt
-                        variant="caption"
-                        color={n === sessions ? t.accent : t.textSecondary}
-                        style={{ fontWeight: "600" }}
-                      >
-                        {n}× · {c} %
-                      </Txt>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            )}
-            {request && (
-              <Txt variant="caption" muted>
-                Tes chances selon le nombre de séances par semaine.
-              </Txt>
-            )}
           </>
         )}
 
-        {step === 5 && (
+        {s === 'objectif' && (
+          <>
+            <Heading
+              title="Quel est ton objectif ?"
+              sub={eventDate ? `Pour ta course du ${formatDateFr(eventDate, { day: 'numeric', month: 'long' })}, avec ${sessions} séance${sessions > 1 ? 's' : ''} par semaine.` : ''}
+            />
+            {DISTANCES.filter((d) => allowedKms.some((k) => sameKm(k, d.km))).map((d) => (
+              <View key={d.km} style={{ gap: Spacing.s }}>
+                <Txt style={styles.catTitle} color={t.textSecondary}>
+                  {d.label}
+                </Txt>
+                <View style={styles.grid}>
+                  {PRESETS[d.km].map((p) => {
+                    const on = preset === p.id;
+                    const b = boundsFor(d.km);
+                    const later = !!(p.sec && b && p.sec < b.min);
+                    const done = !!(p.sec && b && p.sec > b.max);
+                    const a = assessAt(d.km, p.sec);
+                    const lvl = objectiveLevel({ mode: p.sec ? 'chrono' : 'distance', distanceKm: d.km, targetTimeSec: p.sec });
+                    const off = later || done;
+                    return (
+                      <Pressable
+                        key={p.id}
+                        accessibilityRole="radio"
+                        accessibilityLabel={`${d.label} ${p.sub}`}
+                        accessibilityState={{ selected: on, disabled: off }}
+                        disabled={off}
+                        onPress={() => pickPreset(d.km, p)}
+                        style={({ pressed }) => [
+                          styles.preset,
+                          styles.shadow,
+                          { backgroundColor: on ? t.accentSoft : t.surface, borderColor: on ? t.accent : 'transparent', opacity: off ? 0.5 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] },
+                        ]}>
+                        <LevelBars level={lvl} />
+                        <Txt style={styles.presetTitle} color={on ? t.accent : t.text}>
+                          {p.sub}
+                        </Txt>
+                        <Txt variant="caption" color={off ? t.textSecondary : a ? toneOf(a.feasibility, t) : t.textSecondary} style={{ fontWeight: '600' }}>
+                          {later ? 'Pour un prochain objectif' : done ? 'Déjà dans tes jambes' : a ? a.title : ''}
+                        </Txt>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            ))}
+
+            <Pressable
+              accessibilityRole="radio"
+              accessibilityState={{ selected: preset === 'custom' }}
+              onPress={toggleCustom}
+              style={[styles.option, styles.shadow, { backgroundColor: preset === 'custom' ? t.accentSoft : t.surface, borderColor: preset === 'custom' ? t.accent : 'transparent' }]}>
+              <Ionicons name="options-outline" size={20} color={t.accent} />
+              <Txt style={{ fontWeight: '600', flex: 1 }} color={t.accent}>
+                Objectif sur mesure
+              </Txt>
+              <Ionicons name={preset === 'custom' ? 'chevron-up' : 'chevron-down'} size={16} color={t.accent} />
+            </Pressable>
+
+            {preset === 'custom' && (
+              <Card>
+                <Segment
+                  options={[
+                    { value: 'chrono', label: 'Un chrono', icon: 'stopwatch-outline' },
+                    { value: 'distance', label: 'Finir', icon: 'flag-outline' },
+                  ]}
+                  value={mode}
+                  onChange={(v) => {
+                    setMode(v as GoalMode);
+                    if (v === 'chrono' && !targetSec && bounds) setTargetSec(bounds.likely);
+                  }}
+                />
+                {allowedKms.length > 1 && (
+                  <View style={styles.wrap}>
+                    {DISTANCES.filter((d) => allowedKms.some((k) => sameKm(k, d.km))).map((d) => (
+                      <Pill
+                        key={d.km}
+                        label={d.km === 21.0975 ? 'Semi' : d.label}
+                        active={sameKm(customKm, d.km)}
+                        onPress={() => {
+                          setCustomKm(d.km);
+                          const b = boundsFor(d.km);
+                          if (b) setTargetSec(b.likely);
+                        }}
+                      />
+                    ))}
+                  </View>
+                )}
+                {mode === 'chrono' && (
+                  <>
+                    <DurationPicker
+                      label="Temps visé"
+                      value={targetSec}
+                      onChange={setTargetSec}
+                      initial={bounds?.likely ?? 3000}
+                      withHours={km > 15}
+                      hint={targetSec ? `${formatPace(targetSec / km)} /km${bounds ? ` · niveau actuel ≈ ${formatTime(bounds.now)}` : ''}` : undefined}
+                      error={tried && !!targetProblem}
+                    />
+                    {bounds && (
+                      <View style={styles.suggestRow}>
+                        {bounds.suggestions.map((sg) => {
+                          const on = targetSec === sg.timeSec;
+                          return (
+                            <Pressable
+                              key={sg.label}
+                              accessibilityRole="button"
+                              accessibilityLabel={`${sg.label} : ${formatTime(sg.timeSec)}`}
+                              onPress={() => setTargetSec(sg.timeSec)}
+                              style={[styles.suggest, { backgroundColor: on ? t.accentSoft : t.surfaceAlt, borderColor: on ? t.accent : 'transparent' }]}>
+                              <Txt variant="caption" color={on ? t.accent : t.textSecondary} style={{ fontWeight: '600' }}>
+                                {sg.label}
+                              </Txt>
+                              <Txt style={styles.suggestTime}>{formatTime(sg.timeSec)}</Txt>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    )}
+                  </>
+                )}
+              </Card>
+            )}
+
+            {targetProblem && preset ? <Notice text={targetProblem} fix={fixTarget} onFix={(v) => setTargetSec(v)} /> : null}
+          </>
+        )}
+
+        {s === 'recap' && (
           <Recap
             km={km}
             mode={mode}
             targetSec={targetSec}
-            eventDate={eventDate}
+            eventDate={eventDate ?? today}
             weeks={planWeeks}
             sessions={sessions}
             days={days}
@@ -1295,103 +772,58 @@ export default function GoalScreen() {
             race={raceInfo}
             plansCount={plans.length}
             assessment={assessment}
-            problem={
-              request
-                ? null
-                : (targetProblem ?? stepProblem(1) ?? stepProblem(3))
-            }
+            problem={request ? null : problemOf('objectif') ?? problemOf('course') ?? problemOf('perf') ?? problemOf('rythme')}
             fix={fixTarget}
-            onFix={(v) => setTargetText(formatTime(v))}
-            goTo={setStep}
+            onFix={(v) => setTargetSec(v)}
+            goTo={(name) => setStep(STEPS.indexOf(name))}
+            perfLabel={perfLabel}
             levelText={
-              refSource === "run" && run
+              refSource === 'run' && run
                 ? `${kmLabel(run.distanceKm)} en ${formatTime(run.durationSec)}`
-                : refSource === "manual" && manualSec
-                  ? `${distanceLabel(refKm)} en ${formatTime(manualSec)}`
-                  : (LEVELS.find((l) => l.id === level)?.label ?? "")
+                : refSource === 'manual' && refSec
+                  ? `${distanceLabel(refKm)} en ${formatTime(refSec)}`
+                  : (LEVELS.find((l) => l.id === level)?.label ?? '')
             }
-            athleteText={
-              [
-                saved.age ? `${saved.age} ans` : null,
-                athlete.weightKg ? `${athlete.weightKg} kg` : null,
-                athlete.heightCm ? `${athlete.heightCm} cm` : null,
-              ]
-                .filter(Boolean)
-                .join(" · ") || "Non renseigné"
-            }
-            onLever={(kind) =>
-              kind === "sessions"
-                ? pickSessions(Math.min(5, sessions + 1) as SessionsPerWeek)
-                : when === "date"
-                  ? setWeeks((w) => Math.min(MAX_WEEKS, w + 4))
-                  : null
-            }
-            canAddWeeks={when === "date" && weeks + 4 <= MAX_WEEKS}
+            athleteText={[saved.age ? `${saved.age} ans` : null, weightKg ? `${weightKg} kg` : null, heightCm ? `${heightCm} cm` : null].filter(Boolean).join(' · ') || 'Non renseigné'}
+            onLever={(kind) => (kind === 'sessions' ? pickSessions(Math.min(5, sessions + 1) as SessionsPerWeek) : null)}
             request={request}
             athlete={athlete}
             start={start}
           />
         )}
 
-        {tried && problem && step < 5 && step !== 2 ? (
-          <Notice text={problem} />
-        ) : null}
-        {tried && problem && step === 2 && !targetProblem ? (
-          <Notice text={problem} />
-        ) : null}
+        {tried && problem && s !== 'objectif' && s !== 'recap' ? <Notice text={problem} /> : null}
         {error && <Notice text={error} />}
       </ScrollView>
 
-      {/* Barre d'actions */}
-      <View
-        style={[
-          styles.actionBar,
-          {
-            backgroundColor: t.background,
-            borderTopColor: t.line,
-            paddingBottom: Math.max(insets.bottom, Spacing.m),
-          },
-        ]}
-      >
+      <View style={[styles.actionBar, { backgroundColor: t.background, borderTopColor: t.line, paddingBottom: Math.max(insets.bottom, Spacing.m) }]}>
         {step > 0 && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Étape précédente"
-            onPress={() => setStep((s) => Math.max(0, s - 1))}
-            style={[styles.back, { backgroundColor: t.surfaceAlt }]}
-          >
+          <Pressable accessibilityRole="button" accessibilityLabel="Étape précédente" onPress={() => setStep((x) => Math.max(0, x - 1))} style={[styles.back, { backgroundColor: t.surfaceAlt }]}>
             <Ionicons name="chevron-back" size={22} color={t.text} />
           </Pressable>
         )}
         <View style={{ flex: 1 }}>
           {isLast ? (
             <Button
-              icon={full ? "lock-closed" : "rocket"}
+              icon={full ? 'lock-closed' : 'rocket'}
               label={
                 saving
-                  ? "Création du plan…"
+                  ? 'Création du plan…'
                   : full
                     ? `Maximum ${MAX_ACTIVE_PLANS} objectifs en parallèle`
-                    : assessment &&
-                        ["tres_ambitieux", "peu_probable"].includes(
-                          assessment.feasibility,
-                        )
-                      ? "Relever le défi quand même"
-                      : "Créer mon plan"
+                    : assessment && ['tres_ambitieux', 'peu_probable'].includes(assessment.feasibility)
+                      ? 'Relever le défi'
+                      : 'Créer mon plan'
               }
               onPress={submit}
-              disabled={!request || !daysOk || saving || full}
+              disabled={!request || saving || full}
             />
           ) : (
-            <Button
-              label={step === 0 && !weight && !height ? "Passer" : "Continuer"}
-              onPress={next}
-              disabled={step === 2 && !preset}
-            />
+            <Button label={s === 'toi' && !weightKg && !heightCm ? 'Passer' : 'Continuer'} onPress={next} disabled={s === 'objectif' && !preset} />
           )}
         </View>
       </View>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -1412,11 +844,11 @@ function Recap(p: {
   problem: string | null;
   fix: number | null;
   onFix: (sec: number) => void;
-  goTo: (step: number) => void;
+  goTo: (step: Step) => void;
+  perfLabel: string;
   levelText: string;
   athleteText: string;
-  onLever: (kind: "sessions" | "weeks") => void;
-  canAddWeeks: boolean;
+  onLever: (kind: 'sessions') => void;
   request: PlanRequest | null;
   athlete: Athlete;
   start: string;
@@ -1424,66 +856,24 @@ function Recap(p: {
   const t = useTheme();
   const ls = LEVEL_STYLE[p.objLevel];
   const a = p.assessment;
-  const tone = feasibilityTone(a?.feasibility, t);
+  const tone = toneOf(a?.feasibility, t);
 
-  const levers: Array<{
-    kind: "sessions" | "weeks";
-    label: string;
-    c: number;
-  }> = [];
-  if (p.request && a) {
-    if (p.sessions < 5) {
-      const c = assessGoal(p.request.goal, p.request.level, p.start, {
-        sessionsPerWeek: (p.sessions + 1) as SessionsPerWeek,
-        athlete: p.athlete,
-      }).confidence;
-      if (c >= a.confidence + 3)
-        levers.push({
-          kind: "sessions",
-          label: `${p.sessions + 1} séances / sem.`,
-          c,
-        });
-    }
-    if (p.canAddWeeks) {
-      const c = assessGoal(
-        { ...p.request.goal, eventDate: addDays(p.eventDate, 28) },
-        p.request.level,
-        p.start,
-        { sessionsPerWeek: p.sessions, athlete: p.athlete },
-      ).confidence;
-      if (c >= a.confidence + 3)
-        levers.push({ kind: "weeks", label: "4 semaines de plus", c });
-    }
+  const levers: Array<{ kind: 'sessions'; label: string; title: string }> = [];
+  if (p.request && a && p.sessions < 5 && ['exigeant', 'tres_ambitieux', 'peu_probable'].includes(a.feasibility)) {
+    const b = assessGoal(p.request.goal, p.request.level, p.start, { sessionsPerWeek: (p.sessions + 1) as SessionsPerWeek, athlete: p.athlete });
+    if (b.title !== a.title) levers.push({ kind: 'sessions', label: `${p.sessions + 1} séances / sem.`, title: b.title });
   }
 
   return (
     <>
-      <PhotoCard
-        image={
-          p.km >= 40
-            ? "cityRace"
-            : p.km >= 20
-              ? "marathon"
-              : p.mode === "chrono"
-                ? "trackSunset"
-                : "road"
-        }
-        height={300}
-        contentStyle={styles.heroContent}
-      >
+      <PhotoCard image={p.km >= 40 ? 'cityRace' : p.km >= 20 ? 'marathon' : p.mode === 'chrono' ? 'trackSunset' : 'road'} height={300} contentStyle={styles.heroContent}>
         <View style={styles.heroTop}>
           <View style={styles.glassChip}>
             <Txt style={styles.glassChipText} color="#fff" numberOfLines={1}>
-              {p.race?.name ??
-                `Objectif ${Math.min(p.plansCount + 1, MAX_ACTIVE_PLANS)}/${MAX_ACTIVE_PLANS}`}
+              {p.race?.name ?? `Objectif ${Math.min(p.plansCount + 1, MAX_ACTIVE_PLANS)}/${MAX_ACTIVE_PLANS}`}
             </Txt>
           </View>
-          <LinearGradient
-            colors={ls.colors}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.levelPill}
-          >
+          <LinearGradient colors={ls.colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.levelPill}>
             <Bars n={ls.bars} />
             <Txt style={styles.glassChipText} color="#fff">
               Niveau {p.objLevel}
@@ -1492,36 +882,22 @@ function Recap(p: {
         </View>
         <View style={{ gap: 2 }}>
           <Txt style={styles.heroKicker} color="rgba(255,255,255,0.72)">
-            {p.mode === "chrono" ? "Objectif chrono" : "Objectif distance"}
+            {p.mode === 'chrono' ? 'Objectif chrono' : 'Objectif distance'}
           </Txt>
           <Txt style={styles.heroTitle} color="#fff" numberOfLines={1}>
             {distanceLabel(p.km)}
           </Txt>
           <Txt style={styles.heroSub} color="rgba(255,255,255,0.92)">
-            {p.mode === "chrono" && p.targetSec
-              ? `en ${formatTime(p.targetSec)}`
-              : "jusqu’à la ligne d’arrivée"}
+            {p.mode === 'chrono' && p.targetSec ? `en ${formatTime(p.targetSec)}` : 'jusqu’à la ligne d’arrivée'}
           </Txt>
         </View>
         <View style={styles.heroStats}>
-          <HeroStat
-            value={formatDateFr(p.eventDate, {
-              day: "numeric",
-              month: "short",
-            })}
-            label={
-              p.race?.startTime
-                ? clock(p.race.startTime)
-                : DAY_NAMES[
-                    (new Date(p.eventDate + "T12:00:00").getDay() + 6) % 7
-                  ]
-            }
-          />
+          <HeroStat value={formatDateFr(p.eventDate, { day: 'numeric', month: 'short' })} label={p.race?.startTime ? clock(p.race.startTime) : DAY_NAMES[dowOf(p.eventDate)]} />
           <View style={styles.heroDivider} />
           <HeroStat value={`${p.weeks} sem.`} label="de prépa" />
           <View style={styles.heroDivider} />
           <HeroStat value={`${p.sessions}×`} label="par semaine" />
-          {p.mode === "chrono" && p.targetSec ? (
+          {p.mode === 'chrono' && p.targetSec ? (
             <>
               <View style={styles.heroDivider} />
               <HeroStat value={formatPace(p.targetSec / p.km)} label="min/km" />
@@ -1537,104 +913,55 @@ function Recap(p: {
           <View style={styles.rowBetween}>
             <View style={{ flex: 1, gap: 2 }}>
               <Txt variant="caption" muted>
-                Tes chances
+                Ton défi
               </Txt>
               <Txt style={styles.verdictTitle} color={tone}>
                 {a.title}
               </Txt>
             </View>
-            <Txt style={styles.verdictPct} color={tone}>
-              {a.confidence}
-              <Txt style={styles.verdictPctUnit} color={tone}>
-                %
-              </Txt>
-            </Txt>
+            <Ionicons name={['facile', 'tres_probable', 'realiste'].includes(a.feasibility) ? 'happy-outline' : 'flame-outline'} size={34} color={tone} />
           </View>
-          <ProgressBar
-            value={a.confidence / 100}
-            colors={[tone, tone]}
-            height={6}
-          />
+          <ProgressBar value={a.confidence / 100} colors={[tone, tone]} height={6} />
           <Txt muted>{a.message}</Txt>
-          {levers.length > 0 && (
-            <View style={styles.wrap}>
-              {levers.map((l) => (
-                <Pressable
-                  key={l.label}
-                  accessibilityRole="button"
-                  onPress={() => p.onLever(l.kind)}
-                  style={({ pressed }) => [
-                    styles.lever,
-                    {
-                      backgroundColor: t.accentSoft,
-                      opacity: pressed ? 0.7 : 1,
-                    },
-                  ]}
-                >
-                  <Ionicons name="trending-up" size={14} color={t.accent} />
-                  <Txt
-                    variant="caption"
-                    color={t.accent}
-                    style={{ fontWeight: "600" }}
-                  >
-                    {l.label} · {l.c} %
-                  </Txt>
-                </Pressable>
-              ))}
-            </View>
-          )}
+          {levers.map((l) => (
+            <Pressable key={l.label} accessibilityRole="button" onPress={() => p.onLever(l.kind)} style={({ pressed }) => [styles.lever, { backgroundColor: t.accentSoft, opacity: pressed ? 0.7 : 1 }]}>
+              <Ionicons name="trending-up" size={14} color={t.accent} />
+              <Txt variant="caption" color={t.accent} style={{ fontWeight: '600' }}>
+                Avec {l.label} : {l.title.toLowerCase()}
+              </Txt>
+            </Pressable>
+          ))}
         </Card>
       ) : null}
 
       <Card style={{ gap: 0, paddingVertical: Spacing.xs }}>
-        <RecapRow
-          icon="person-outline"
-          label="Toi"
-          value={p.athleteText}
-          onEdit={() => p.goTo(0)}
-        />
-        <RecapRow
-          icon="speedometer-outline"
-          label="Ta forme"
-          value={p.levelText}
-          onEdit={() => p.goTo(1)}
-        />
-        <RecapRow
-          icon="flag-outline"
-          label="Objectif"
-          value={
-            p.mode === "chrono" && p.targetSec
-              ? `${distanceLabel(p.km)} en ${formatTime(p.targetSec)}`
-              : `Finir : ${distanceLabel(p.km)}`
-          }
-          onEdit={() => p.goTo(2)}
-        />
+        <RecapRow icon="person-outline" label="Toi" value={p.athleteText} onEdit={() => p.goTo('toi')} />
+        <RecapRow icon="speedometer-outline" label={p.perfLabel} value={p.levelText} onEdit={() => p.goTo('perf')} />
         <RecapRow
           icon="calendar-outline"
           label="Course"
-          value={`${p.race?.name ? `${p.race.name} · ` : ""}${formatDateFr(p.eventDate, { weekday: "short", day: "numeric", month: "short" })}`}
-          onEdit={() => p.goTo(3)}
+          value={`${p.race?.name ? `${p.race.name} · ` : ''}${formatDateFr(p.eventDate, { weekday: 'short', day: 'numeric', month: 'short' })}`}
+          onEdit={() => p.goTo('course')}
         />
         <RecapRow
           icon="repeat-outline"
           label="Rythme"
-          value={`${p.sessions} séance${p.sessions > 1 ? "s" : ""} · ${[
-            ...p.days,
-          ]
+          value={`${p.sessions} séance${p.sessions > 1 ? 's' : ''} · ${[...p.days]
             .sort((x, y) => x - y)
             .map((d) => DAY_NAMES[d].slice(0, 3))
-            .join(", ")}`}
-          onEdit={() => p.goTo(4)}
+            .join(', ')}`}
+          onEdit={() => p.goTo('rythme')}
+        />
+        <RecapRow
+          icon="flag-outline"
+          label="Objectif"
+          value={p.mode === 'chrono' && p.targetSec ? `${distanceLabel(p.km)} en ${formatTime(p.targetSec)}` : `Finir : ${distanceLabel(p.km)}`}
+          onEdit={() => p.goTo('objectif')}
           last
         />
       </Card>
-      <Txt variant="caption" muted style={{ textAlign: "center" }}>
-        Début du plan :{" "}
-        {formatDateFr(p.start, {
-          weekday: "long",
-          day: "numeric",
-          month: "long",
-        })}
+      <Txt variant="caption" muted style={{ textAlign: 'center' }}>
+        Début du plan : {formatDateFr(p.start, { weekday: 'long', day: 'numeric', month: 'long' })}
       </Txt>
     </>
   );
@@ -1644,7 +971,7 @@ function Recap(p: {
 
 type Theme = ReturnType<typeof useTheme>;
 
-function feasibilityTone(f: Feasibility | undefined, t: Theme): string {
+function toneOf(f: Feasibility | undefined, t: Theme): string {
   if (!f) return t.line;
   if (f === "facile" || f === "tres_probable" || f === "realiste") return t.ok;
   if (f === "exigeant") return t.warn;
@@ -1931,13 +1258,7 @@ function Pill({
   );
 }
 
-function DayPicker({
-  selected,
-  onToggle,
-}: {
-  selected: number[];
-  onToggle: (d: number) => void;
-}) {
+function DayPicker({ selected, onToggle, race }: { selected: number[]; onToggle: (d: number) => void; race?: number }) {
   const t = useTheme();
   return (
     <View style={styles.days}>
@@ -1953,17 +1274,15 @@ function DayPicker({
               Haptics.selectionAsync().catch(() => {});
               onToggle(i);
             }}
-            style={[
-              styles.day,
-              { backgroundColor: on ? t.accent : t.surfaceAlt },
-            ]}
-          >
-            <Txt
-              style={styles.dayLabel}
-              color={on ? t.accentText : t.textSecondary}
-            >
+            style={[styles.day, { backgroundColor: on ? t.accent : t.surfaceAlt }]}>
+            <Txt style={styles.dayLabel} color={on ? t.accentText : t.textSecondary}>
               {d}
             </Txt>
+            {race === i ? (
+              <View style={[styles.raceFlag, { backgroundColor: t.flame }]}>
+                <Ionicons name="flag" size={9} color="#fff" />
+              </View>
+            ) : null}
           </Pressable>
         );
       })}
@@ -2004,111 +1323,6 @@ function RoundBtn({
     >
       <Ionicons name={icon} size={20} color={t.accent} />
     </Pressable>
-  );
-}
-
-function TimeBox({
-  label,
-  value,
-  onChange,
-  placeholder,
-  hint,
-  error,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder: string;
-  hint: string;
-  error?: boolean;
-}) {
-  const t = useTheme();
-  return (
-    <View
-      style={[
-        styles.timeBox,
-        {
-          backgroundColor: t.surfaceAlt,
-          borderColor: error ? t.bad : "transparent",
-        },
-      ]}
-    >
-      <Txt variant="caption" muted>
-        {label}
-      </Txt>
-      <TextInput
-        accessibilityLabel={label}
-        value={value}
-        onChangeText={onChange}
-        placeholder={placeholder}
-        placeholderTextColor={t.textSecondary}
-        keyboardType="numbers-and-punctuation"
-        returnKeyType="done"
-        maxLength={8}
-        selectTextOnFocus
-        style={[styles.timeInput, { color: t.text }]}
-      />
-      <Txt variant="caption" muted>
-        {hint}
-      </Txt>
-    </View>
-  );
-}
-
-function Field({
-  label,
-  unit,
-  value,
-  onChange,
-  keyboardType,
-  placeholder,
-  flex,
-  big,
-}: {
-  label: string;
-  unit?: string;
-  value: string;
-  onChange: (v: string) => void;
-  keyboardType:
-    | "decimal-pad"
-    | "number-pad"
-    | "numbers-and-punctuation"
-    | "default";
-  placeholder?: string;
-  flex?: boolean;
-  big?: boolean;
-}) {
-  const t = useTheme();
-  return (
-    <View
-      style={[
-        styles.field,
-        { backgroundColor: t.surfaceAlt },
-        flex && { flex: 1 },
-      ]}
-    >
-      <Txt variant="caption" muted>
-        {label}
-      </Txt>
-      <View style={styles.row}>
-        <TextInput
-          accessibilityLabel={label}
-          value={value}
-          onChangeText={onChange}
-          placeholder={placeholder}
-          placeholderTextColor={t.textSecondary}
-          keyboardType={keyboardType}
-          returnKeyType="done"
-          maxLength={keyboardType === "default" ? 80 : 8}
-          style={[styles.fieldInput, big && styles.fieldBig, { color: t.text }]}
-        />
-        {unit ? (
-          <Txt variant="caption" muted>
-            {unit}
-          </Txt>
-        ) : null}
-      </View>
-    </View>
   );
 }
 
@@ -2372,6 +1586,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  raceFlag: { position: 'absolute', top: -4, right: -4, width: 16, height: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  catTitle: { fontSize: 15, fontWeight: '700', paddingHorizontal: 4 },
   dayLabel: { fontSize: 13, fontWeight: "600" },
   miniConf: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
 

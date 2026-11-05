@@ -1,3 +1,5 @@
+import { Redirect } from 'expo-router';
+import { AI_COACH_ENABLED } from '@/lib/features';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View, type ScrollViewInstance } from 'react-native';
@@ -21,6 +23,11 @@ const SUGGESTIONS = [
 ];
 
 export default function CoachScreen() {
+  if (!AI_COACH_ENABLED) return <Redirect href="/" />;
+  return <Coach />;
+}
+
+function Coach() {
   const t = useTheme();
   const { plans, stats, setEnrichment } = useStore();
   const [messages, setMessages] = useState<Msg[]>([]);

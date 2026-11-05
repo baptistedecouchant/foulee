@@ -667,3 +667,13 @@ describe('semaine de course', () => {
     expect(txt).not.toContain('gel toutes');
   });
 });
+
+describe('mots encourageants', () => {
+  it('aucun message de faisabilité ne parle de pourcentage à gagner ni d’objectif irréalisable', () => {
+    for (const t of [20, 30, 36, 40, 44, 47, 52, 60].map((m) => m * 60))
+      for (const n of [1, 3, 5] as const) {
+        const a = assessGoal({ ...tenK45.goal, targetTimeSec: t }, tenK45.level, START, { sessionsPerWeek: n });
+        expect(`${a.title} ${a.message}`).not.toMatch(/%|gagner|irr[ée]alis|ambitieux|attention|peu probable/i);
+      }
+  });
+});

@@ -147,7 +147,7 @@ export function assessGoal(goal: Goal, level: CurrentLevel, startDate: string, o
 
   // Délai court : on prévient, on ne bloque pas.
   const shortNote =
-    weeks < minWeeks ? ` Attention : ${weeks} semaine${weeks > 1 ? 's' : ''}, c’est court pour un ${label} à ton niveau (idéalement ${minWeeks}). Le plan sera plus prudent.` : '';
+    weeks < minWeeks ? ` Délai court pour un ${label} : le plan restera progressif pour te garder en forme jusqu’au jour J.` : '';
 
   if (goal.mode === 'distance') {
     const ratio = weeks / minWeeks;
@@ -157,8 +157,8 @@ export function assessGoal(goal: Goal, level: CurrentLevel, startDate: string, o
       ...base,
       feasibility,
       confidence,
-      title: { tres_probable: 'Largement faisable', realiste: 'Objectif réaliste', exigeant: 'Faisable, mais serré', delai_court: 'Délai très court' }[feasibility as 'tres_probable'],
-      message: `Temps estimé le jour J : entre ${formatTime(bestSec)} et ${formatTime(likelySec)}.${shortNote}`,
+      title: { tres_probable: 'Largement à ta portée', realiste: 'Objectif réaliste', exigeant: 'Exigeant', delai_court: 'Très difficile' }[feasibility as 'tres_probable'],
+      message: `Temps estimé le jour J : entre ${formatTime(bestSec)} et ${formatTime(likelySec)}. Chaque séance te rapproche de la ligne d’arrivée.${shortNote}`,
     };
   }
 
@@ -175,15 +175,16 @@ export function assessGoal(goal: Goal, level: CurrentLevel, startDate: string, o
   else if (r <= 1.6) feasibility = 'tres_ambitieux';
   else feasibility = 'peu_probable';
 
-  const pct = Math.round(needed * 100);
+  const n = `${sessions} séance${sessions > 1 ? 's' : ''} par semaine`;
+  // Toujours des mots qui donnent envie : on décrit l'effort, jamais l'échec.
   const messages: Record<Feasibility, [string, string]> = {
-    facile: ['Déjà à ta portée', `Ton niveau actuel correspond à environ ${formatTime(predictedNowSec)}. Tu peux viser plus vite : ${formatTime(likelySec)} est réaliste.`],
-    tres_probable: ['Très probable', `Il faut gagner ${pct} % (niveau actuel : ${formatTime(predictedNowSec)}). Avec ${sessions} séance${sessions > 1 ? 's' : ''} par semaine, c’est largement faisable.`],
-    realiste: ['Objectif réaliste', `Il faut gagner ${pct} % (niveau actuel : ${formatTime(predictedNowSec)}). Faisable en ${weeks} semaines si tu es régulier.`],
-    exigeant: ['Réaliste mais exigeant', `Il faut gagner ${pct} %, c’est proche de ton maximum en ${weeks} semaines. Chaque séance comptera.`],
-    tres_ambitieux: ['Très ambitieux', `Il faut gagner ${pct} %. Le plus probable le jour J : environ ${formatTime(likelySec)}. Ajouter des semaines ou une séance augmenterait tes chances.`],
-    peu_probable: ['Peu probable dans ce délai', `Il faudrait gagner ${pct} %. Le plus probable le jour J : environ ${formatTime(likelySec)}. Tu peux garder cet objectif comme cap, ou viser ${formatTime(bestSec)}.`],
-    delai_court: ['Délai très court', ''],
+    facile: ['Dans tes cordes', `Tu as déjà le niveau pour ce chrono : profite du plan pour courir plus vite et plus facilement. Pourquoi pas ${formatTime(likelySec)} ?`],
+    tres_probable: ['Très accessible', `Avec ${n}, tu as tout pour réussir. Garde le rythme et savoure ta progression.`],
+    realiste: ['Objectif réaliste', `En restant régulier pendant ${weeks} semaines, tu vas y arriver. Chaque séance compte.`],
+    exigeant: ['Exigeant', `Il va falloir être assidu : c’est exactement ce qui rendra la réussite aussi belle. Suis le plan, on s’occupe du reste.`],
+    tres_ambitieux: ['Difficile', `Un vrai défi ! Une séance de plus par semaine ou quelques semaines de préparation en plus te donneraient de la marge.`],
+    peu_probable: ['Très difficile', `Un gros défi pour ce délai. Le plan va te faire progresser au maximum : ${formatTime(likelySec)} serait déjà une superbe étape.`],
+    delai_court: ['Très difficile', ''],
   };
   const [title, message] = messages[feasibility];
   return { ...base, feasibility, confidence, title, message: message + shortNote };

@@ -9,6 +9,7 @@ import { Gradients, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { goalTitle, planProgress, SESSION_ICON } from '@/lib/labels';
 import { formatDateFr, todayIso, useStore, type Enrichment, type PlanEntry } from '@/lib/store';
+import { AI_COACH_ENABLED } from '@/lib/features';
 import { callFunction, isDemo } from '@/lib/supabase';
 import { RaceWeek } from '@/components/race-week';
 import { useAthlete } from '@/lib/athlete';
@@ -109,7 +110,7 @@ export default function PlanScreen() {
         )
       ) : null}
 
-      {entry.enrichment ? (
+      {!AI_COACH_ENABLED ? null : entry.enrichment ? (
         <GradientCard colors={Gradients.energy}>
           <Row>
             <Ionicons name="sparkles" size={18} color="#fff" />

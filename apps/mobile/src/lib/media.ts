@@ -41,3 +41,29 @@ export async function saveAvatarUrl(url: string | null) {
   const { error } = await supabase.from('profiles').update({ avatar_url: url }).eq('id', data.user.id);
   if (error) throw error;
 }
+
+const tried = new Set<string>();
+
+/**
+ * Connexion avec Google (ou Apple) : si le compte n'a pas encore de photo de profil, on recopie
+ * celle du fournisseur dans le dossier de l'utilisateur (une seule tentative par session).
+ * Renvoie true si une photo a été enregistrée.
+ */
+export async function importProviderAvatar(): Promise<boolean> {
+  if (isDemo || !supabase) return false;
+  const { data } = await supabase.auth.getUser();
+  const user = data.user;
+  if (!user || tried.has(user.id)) return false;
+  tried.add(user.id);
+  const meta = (user.user_metadata ?? {}) as Record<string, unknown>;
+  const raw = (typeof meta.avatar_url === 'string' && meta.avatar_url) || (typeof meta.picture === 'string' && meta.picture) || null;
+  if (!raw || !/^https:\/\//.test(raw)) return false;
+  // Photo Google en plus grand (l'adresse par défaut est en 96 px).
+  const url = raw.replace(/=s\d+(-c)?$/, '=s400-c');
+  try {
+    await saveAvatarUrl(await uploadPhoto(url, 'avatar'));
+    return true;
+  } catch {
+    return false;
+  }
+}

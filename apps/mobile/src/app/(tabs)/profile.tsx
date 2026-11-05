@@ -13,6 +13,7 @@ import { Gradients, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useTopInset } from '@/hooks/use-top-inset';
 import { useAthlete } from '@/lib/athlete';
+import { AI_COACH_ENABLED } from '@/lib/features';
 import { heightError, weightError } from '@/lib/auth';
 import { fmtInt, goalTitle } from '@/lib/labels';
 import { REWARD_LEVELS } from '@/lib/rewards';
@@ -300,8 +301,8 @@ export default function ProfileScreen() {
       {/* ---------- Compte ---------- */}
       <Card style={{ gap: 0, paddingVertical: Spacing.s }}>
         <LinkRow icon="person-circle" label="Mon compte et confidentialité" onPress={() => router.push('/account')} />
-        <LinkRow icon="watch" label="Montres et apps" onPress={() => router.push('/devices')} />
-        <LinkRow icon="chatbubbles" label="Coach IA" onPress={() => router.push('/coach')} last />
+        <LinkRow icon="watch" label="Montres et apps" onPress={() => router.push('/devices')} last={!AI_COACH_ENABLED} />
+        {AI_COACH_ENABLED && <LinkRow icon="chatbubbles" label="Coach IA" onPress={() => router.push('/coach')} last />}
       </Card>
     </ScrollView>
   );
