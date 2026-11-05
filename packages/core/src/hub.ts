@@ -7,6 +7,8 @@ export interface HubPlayer {
   name: string;
   city: string | null;
   color: string;
+  /** Photo de profil (facultative). */
+  avatarUrl?: string | null;
   km7: number;
   km30: number;
   runs30: number;
@@ -57,7 +59,7 @@ export interface HubConversation {
 }
 
 export interface HubOverview {
-  me: { id: string; name: string | null; friendCode?: string; city: string | null; km7: number; km30: number; runs30: number };
+  me: { id: string; name: string | null; friendCode?: string; city: string | null; avatarUrl?: string | null; km7: number; km30: number; runs30: number };
   friends: HubPlayer[];
   incoming: Array<{ id: string; name: string }>;
   outgoing: Array<{ id: string; name: string }>;

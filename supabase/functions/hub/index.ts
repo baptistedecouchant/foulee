@@ -185,7 +185,7 @@ async function friendGoals(db: SupabaseClient, users: string[]): Promise<Map<str
 
 async function overview(db: SupabaseClient, me: string): Promise<HubOverview> {
   const now = Date.now();
-  const { data: profile } = await db.from('profiles').select('id, display_name, friend_code, city, avatar_color').eq('id', me).single();
+  const { data: profile } = await db.from('profiles').select('id, display_name, friend_code, city, avatar_color, avatar_url').eq('id', me).single();
 
   const { data: fr } = await db.from('friendships').select('*').or(`user_a.eq.${me},user_b.eq.${me}`);
   const otherOf = (f: { user_a: string; user_b: string }) => (f.user_a === me ? f.user_b : f.user_a);
@@ -202,7 +202,7 @@ async function overview(db: SupabaseClient, me: string): Promise<HubOverview> {
   const { data: parts } = chIds.length ? await db.from('challenge_participants').select('*').in('challenge_id', chIds) : { data: [] };
 
   const people = [...new Set([me, ...acceptedIds, ...incomingIds, ...outgoingIds, ...(parts ?? []).map((p) => p.user_id)])];
-  const { data: profiles } = await db.from('profiles').select('id, display_name, city, avatar_color').in('id', people);
+  const { data: profiles } = await db.from('profiles').select('id, display_name, city, avatar_color, avatar_url').in('id', people);
   const nameOf = (id: string) => profiles?.find((p) => p.id === id)?.display_name || 'Coureur';
   const runs = await runsOf(db, [...new Set([me, ...acceptedIds, ...(parts ?? []).map((p) => p.user_id)])], now - 45 * DAY);
 
@@ -251,6 +251,7 @@ async function overview(db: SupabaseClient, me: string): Promise<HubOverview> {
       name: p?.display_name || 'Coureur',
       city: p?.city ?? null,
       color: p?.avatar_color ?? '#3A4BFF',
+      avatarUrl: p?.avatar_url ?? null,
       ...stats,
       challenges: challenges.filter((c) => !c.finished && c.standings.some((s) => s.userId === id)).map((c) => c.templateId),
       goals: goals.get(id) ?? [],
@@ -276,7 +277,7 @@ async function overview(db: SupabaseClient, me: string): Promise<HubOverview> {
   conversations.sort((a, b) => (b.last?.created_at ?? '').localeCompare(a.last?.created_at ?? ''));
 
   return {
-    me: { id: me, name: profile?.display_name ?? null, friendCode: profile?.friend_code, city: profile?.city ?? null, ...periodStats(runs.get(me) ?? [], now) },
+    me: { id: me, name: profile?.display_name ?? null, friendCode: profile?.friend_code, city: profile?.city ?? null, avatarUrl: profile?.avatar_url ?? null, ...periodStats(runs.get(me) ?? [], now) },
     friends: acceptedIds.map(card),
     incoming: incomingIds.map((id) => ({ id, name: nameOf(id) })),
     outgoing: outgoingIds.map((id) => ({ id, name: nameOf(id) })),

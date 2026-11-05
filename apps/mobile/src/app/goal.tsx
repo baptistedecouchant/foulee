@@ -1,9 +1,18 @@
-import * as Haptics from 'expo-haptics';
-import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View, type ScrollViewInstance } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Haptics from "expo-haptics";
+import { LinearGradient } from "expo-linear-gradient";
+import { router, Stack } from "expo-router";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+  type ScrollViewInstance,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   addDays,
   assessGoal,
@@ -29,68 +38,131 @@ import {
   type PlanRequest,
   type RaceEvent,
   type SessionsPerWeek,
-} from '@foulee/core';
+} from "@foulee/core";
 
-import { Button, Ionicons, ProgressBar, Txt, type IconName } from '@/components/ui';
-import { PhotoCard } from '@/components/visuals';
-import { Gradients, Radius, Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
-import { useAthlete } from '@/lib/athlete';
-import { heightError, weightError } from '@/lib/auth';
-import { formatDateFr, MAX_ACTIVE_PLANS, todayIso, useStore } from '@/lib/store';
+import { GoalCelebration } from "@/components/goal-celebration";
+import {
+  Button,
+  Ionicons,
+  ProgressBar,
+  Txt,
+  type IconName,
+} from "@/components/ui";
+import { PhotoCard } from "@/components/visuals";
+import { Gradients, Radius, Spacing } from "@/constants/theme";
+import { useTheme } from "@/hooks/use-theme";
+import { useAthlete } from "@/lib/athlete";
+import { heightError, weightError } from "@/lib/auth";
+import {
+  formatDateFr,
+  MAX_ACTIVE_PLANS,
+  todayIso,
+  useStore,
+} from "@/lib/store";
 
 // ---------- Données ----------
 
 const DISTANCES = [
-  { km: 5, label: '5 km' },
-  { km: 10, label: '10 km' },
-  { km: 21.0975, label: 'Semi' },
-  { km: 42.195, label: 'Marathon' },
+  { km: 5, label: "5 km" },
+  { km: 10, label: "10 km" },
+  { km: 21.0975, label: "Semi" },
+  { km: 42.195, label: "Marathon" },
 ];
 
-const LEVELS: Array<{ id: Extract<CurrentLevel, { kind: 'estimate' }>['level']; label: string; hint: string; icon: IconName }> = [
-  { id: 'debutant', label: 'Je débute', hint: '20 à 30 min sans m’arrêter', icon: 'walk' },
-  { id: 'occasionnel', label: 'Un peu', hint: '1 à 2 sorties par semaine', icon: 'footsteps' },
-  { id: 'regulier', label: 'Régulier', hint: '3 sorties ou plus', icon: 'speedometer' },
-  { id: 'confirme', label: 'Confirmé', hint: 'Je fais du fractionné', icon: 'flash' },
+const LEVELS: Array<{
+  id: Extract<CurrentLevel, { kind: "estimate" }>["level"];
+  label: string;
+  hint: string;
+  icon: IconName;
+}> = [
+  {
+    id: "debutant",
+    label: "Je débute",
+    hint: "20 à 30 min sans m’arrêter",
+    icon: "walk",
+  },
+  {
+    id: "occasionnel",
+    label: "Un peu",
+    hint: "1 à 2 sorties par semaine",
+    icon: "footsteps",
+  },
+  {
+    id: "regulier",
+    label: "Régulier",
+    hint: "3 sorties ou plus",
+    icon: "speedometer",
+  },
+  {
+    id: "confirme",
+    label: "Confirmé",
+    hint: "Je fais du fractionné",
+    icon: "flash",
+  },
 ];
 
 /** Objectifs proposés par défaut. */
-const PRESETS: Array<{ id: string; km: number; sec?: number; title: string; sub: string }> = [
-  { id: '10k60', km: 10, sec: 3600, title: '10 km', sub: 'en 1 h' },
-  { id: 'semi2h', km: 21.0975, sec: 7200, title: 'Semi', sub: 'en 2 h' },
-  { id: 'mara4h', km: 42.195, sec: 14400, title: 'Marathon', sub: 'en 4 h' },
-  { id: '5k30', km: 5, sec: 1800, title: '5 km', sub: 'en 30 min' },
-  { id: '10k50', km: 10, sec: 3000, title: '10 km', sub: 'en 50 min' },
-  { id: 'semi145', km: 21.0975, sec: 6300, title: 'Semi', sub: 'en 1 h 45' },
-  { id: 'finish-semi', km: 21.0975, title: 'Semi', sub: 'le finir' },
-  { id: 'finish-mara', km: 42.195, title: 'Marathon', sub: 'le finir' },
+const PRESETS: Array<{
+  id: string;
+  km: number;
+  sec?: number;
+  title: string;
+  sub: string;
+}> = [
+  { id: "10k60", km: 10, sec: 3600, title: "10 km", sub: "en 1 h" },
+  { id: "semi2h", km: 21.0975, sec: 7200, title: "Semi", sub: "en 2 h" },
+  { id: "mara4h", km: 42.195, sec: 14400, title: "Marathon", sub: "en 4 h" },
+  { id: "5k30", km: 5, sec: 1800, title: "5 km", sub: "en 30 min" },
+  { id: "10k50", km: 10, sec: 3000, title: "10 km", sub: "en 50 min" },
+  { id: "semi145", km: 21.0975, sec: 6300, title: "Semi", sub: "en 1 h 45" },
+  { id: "finish-semi", km: 21.0975, title: "Semi", sub: "le finir" },
+  { id: "finish-mara", km: 42.195, title: "Marathon", sub: "le finir" },
 ];
 
-const DAYS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
-const DAY_NAMES = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'];
+const DAYS = ["L", "M", "M", "J", "V", "S", "D"];
+const DAY_NAMES = [
+  "lundi",
+  "mardi",
+  "mercredi",
+  "jeudi",
+  "vendredi",
+  "samedi",
+  "dimanche",
+];
 
-const LEVEL_STYLE: Record<ObjectiveLevel, { colors: readonly [string, string]; bars: number }> = {
+const LEVEL_STYLE: Record<
+  ObjectiveLevel,
+  { colors: readonly [string, string]; bars: number }
+> = {
   débutant: { colors: Gradients.xp, bars: 1 },
   intermédiaire: { colors: Gradients.energy, bars: 2 },
   expert: { colors: Gradients.flame, bars: 3 },
 };
 
-const STEPS = ['Toi', 'Ta forme', 'Ton objectif', 'Ta course', 'Ton rythme', 'Récap'] as const;
+const STEPS = [
+  "Toi",
+  "Ta forme",
+  "Ton objectif",
+  "Ta course",
+  "Ton rythme",
+  "Récap",
+] as const;
 /** « 09:30 » → « 9 h 30 » */
-const clock = (hhmm: string) => `${Number(hhmm.slice(0, 2))} h ${hhmm.slice(3, 5)}`;
+const clock = (hhmm: string) =>
+  `${Number(hhmm.slice(0, 2))} h ${hhmm.slice(3, 5)}`;
 const MAX_WEEKS = 30;
 const stepFor = (sec: number) => (sec < 1800 ? 15 : sec < 5400 ? 30 : 60);
 const roundTo = (s: number, step: number) => Math.round(s / step) * step;
 const num = (s: string) => {
-  const n = Number(s.replace(',', '.'));
+  const n = Number(s.replace(",", "."));
   return s.trim() && Number.isFinite(n) ? n : null;
 };
 const sameKm = (a: number, b: number) => Math.abs(a - b) < 0.3;
-const kmLabel = (km: number) => `${String(Math.round(km * 10) / 10).replace('.', ',')} km`;
+const kmLabel = (km: number) =>
+  `${String(Math.round(km * 10) / 10).replace(".", ",")} km`;
 
-type RefSource = 'run' | 'manual' | 'estimate';
-type When = 'race' | 'date';
+type RefSource = "run" | "manual" | "estimate";
+type When = "race" | "date";
 
 export default function GoalScreen() {
   const t = useTheme();
@@ -101,32 +173,42 @@ export default function GoalScreen() {
   const start = suggestedStartDate(today);
   const scroll = useRef<ScrollViewInstance>(null);
 
-  const recent = useMemo(() => runs.filter((r) => r.distanceKm >= 3 && r.durationSec > 600).slice(0, 5), [runs]);
+  const recent = useMemo(
+    () =>
+      runs.filter((r) => r.distanceKm >= 3 && r.durationSec > 600).slice(0, 5),
+    [runs],
+  );
 
   const [step, setStep] = useState(0);
   // 1. Toi
-  const [weight, setWeight] = useState(saved.weightKg ? String(saved.weightKg) : '');
-  const [height, setHeight] = useState(saved.heightCm ? String(saved.heightCm) : '');
+  const [weight, setWeight] = useState(
+    saved.weightKg ? String(saved.weightKg) : "",
+  );
+  const [height, setHeight] = useState(
+    saved.heightCm ? String(saved.heightCm) : "",
+  );
   // 2. Forme
-  const [refSource, setRefSource] = useState<RefSource>(recent.length ? 'run' : 'manual');
+  const [refSource, setRefSource] = useState<RefSource>(
+    recent.length ? "run" : "manual",
+  );
   const [runId, setRunId] = useState<string | null>(recent[0]?.id ?? null);
   const [refKm, setRefKm] = useState(10);
-  const [refTime, setRefTime] = useState('');
-  const [level, setLevel] = useState<(typeof LEVELS)[number]['id']>('occasionnel');
+  const [refTime, setRefTime] = useState("");
+  const [level, setLevel] =
+    useState<(typeof LEVELS)[number]["id"]>("occasionnel");
   // 3. Objectif
   const [preset, setPreset] = useState<string | null>(null);
-  const [mode, setMode] = useState<GoalMode>('chrono');
-  const [distance, setDistance] = useState<number | 'autre'>(10);
-  const [otherKm, setOtherKm] = useState('15');
-  const [targetText, setTargetText] = useState('');
+  const [mode, setMode] = useState<GoalMode>("chrono");
+  const [distance, setDistance] = useState<number | "autre">(10);
+  const [otherKm, setOtherKm] = useState("15");
+  const [targetText, setTargetText] = useState("");
   // 4. Course
-  const [when, setWhen] = useState<When>('race');
-  const [query, setQuery] = useState('');
+  const [when, setWhen] = useState<When>("race");
+  const [query, setQuery] = useState("");
   const [raceId, setRaceId] = useState<string | null>(null);
   const [weeks, setWeeks] = useState(12);
   const [raceDow, setRaceDow] = useState(6);
-  const [raceName, setRaceName] = useState('');
-  const [startTime, setStartTime] = useState('');
+  const [startTime, setStartTime] = useState("");
   // 5. Rythme
   const [sessions, setSessions] = useState<SessionsPerWeek>(3);
   const [days, setDays] = useState<number[]>(DAY_SETS[3]);
@@ -134,6 +216,7 @@ export default function GoalScreen() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tried, setTried] = useState(false);
+  const [created, setCreated] = useState<string | null>(null);
 
   // Le profil peut arriver après l'ouverture de l'écran.
   useEffect(() => {
@@ -157,62 +240,122 @@ export default function GoalScreen() {
   const run = recent.find((r) => r.id === runId);
   const manualSec = parseGoalTime(refTime, refKm);
   const currentLevel: CurrentLevel | null =
-    refSource === 'estimate'
-      ? { kind: 'estimate', level }
-      : refSource === 'run'
+    refSource === "estimate"
+      ? { kind: "estimate", level }
+      : refSource === "run"
         ? run
-          ? { kind: 'race', distanceKm: run.distanceKm, timeSec: run.durationSec }
+          ? {
+              kind: "race",
+              distanceKm: run.distanceKm,
+              timeSec: run.durationSec,
+            }
           : null
         : manualSec && manualSec / refKm >= 150 && manualSec / refKm <= 720
-          ? { kind: 'race', distanceKm: refKm, timeSec: manualSec }
+          ? { kind: "race", distanceKm: refKm, timeSec: manualSec }
           : null;
 
-  const km = distance === 'autre' ? (num(otherKm) ?? 0) : distance;
+  const km = distance === "autre" ? (num(otherKm) ?? 0) : distance;
   const kmOk = km >= 1 && km <= 100;
 
-  const allRaces = useMemo(() => searchRaces(RACE_CALENDAR, { query, fromIso: start, distanceKm: kmOk ? km : undefined }), [query, start, km, kmOk]);
+  const allRaces = useMemo(
+    () =>
+      searchRaces(RACE_CALENDAR, {
+        query,
+        fromIso: start,
+        distanceKm: kmOk ? km : undefined,
+      }),
+    [query, start, km, kmOk],
+  );
   const races = allRaces.filter((r) => weeksUntil(start, r.date) <= MAX_WEEKS);
-  const race: RaceEvent | undefined = RACE_CALENDAR.find((r) => r.id === raceId);
+  const race: RaceEvent | undefined = RACE_CALENDAR.find(
+    (r) => r.id === raceId,
+  );
   // Une course qui ne propose pas la distance visée n'est plus valable.
   useEffect(() => {
-    if (race && kmOk && !race.distances.some((d) => sameKm(d, km))) setRaceId(null);
+    if (race && kmOk && !race.distances.some((d) => sameKm(d, km)))
+      setRaceId(null);
   }, [race, km, kmOk]);
-  const eventDate = when === 'race' && race ? race.date : addDays(start, (weeks - 1) * 7 + raceDow);
+  const eventDate =
+    when === "race" && race
+      ? race.date
+      : addDays(start, (weeks - 1) * 7 + raceDow);
   const planWeeks = Math.max(1, weeksUntil(start, eventDate));
   const opts = { sessionsPerWeek: sessions, athlete };
 
-  const base = currentLevel && kmOk ? assessGoal({ mode: 'distance', sport: 'running', distanceKm: km, eventDate }, currentLevel, start, opts) : null;
+  const base =
+    currentLevel && kmOk
+      ? assessGoal(
+          { mode: "distance", sport: "running", distanceKm: km, eventDate },
+          currentLevel,
+          start,
+          opts,
+        )
+      : null;
   const tStep = base ? stepFor(base.predictedNowSec) : 30;
-  const bounds = base ? { min: roundTo(base.achievable.bestSec * 0.95, tStep), max: roundTo(base.predictedNowSec * 1.3, tStep) } : null;
-  const targetSec = mode === 'chrono' ? parseGoalTime(targetText, km) : null;
+  const bounds = base
+    ? {
+        min: roundTo(base.achievable.bestSec * 0.95, tStep),
+        max: roundTo(base.predictedNowSec * 1.3, tStep),
+      }
+    : null;
+  const targetSec = mode === "chrono" ? parseGoalTime(targetText, km) : null;
 
   const targetProblem = (() => {
-    if (mode !== 'chrono' || !bounds) return null;
-    if (!targetText.trim()) return 'Indique le temps que tu vises.';
-    if (!targetSec) return 'Format attendu : 45:00, 1:45:00 ou 1h45.';
-    if (targetSec < bounds.min) return `Trop rapide pour ton niveau en ${planWeeks} semaine${planWeeks > 1 ? 's' : ''}. Le plus rapide envisageable : ${formatTime(bounds.min)}.`;
-    if (targetSec > bounds.max) return `Bien plus lent que ton niveau actuel (${formatTime(base!.predictedNowSec)}). Vise ${formatTime(bounds.max)} ou plus vite.`;
+    if (mode !== "chrono" || !bounds) return null;
+    if (!targetText.trim()) return "Indique le temps que tu vises.";
+    if (!targetSec) return "Format attendu : 45:00, 1:45:00 ou 1h45.";
+    if (targetSec < bounds.min)
+      return `Trop rapide pour ton niveau en ${planWeeks} semaine${planWeeks > 1 ? "s" : ""}. Le plus rapide envisageable : ${formatTime(bounds.min)}.`;
+    if (targetSec > bounds.max)
+      return `Bien plus lent que ton niveau actuel (${formatTime(base!.predictedNowSec)}). Vise ${formatTime(bounds.max)} ou plus vite.`;
     return null;
   })();
-  const fixTarget = targetSec && bounds ? (targetSec < bounds.min ? bounds.min : targetSec > bounds.max ? bounds.max : null) : null;
+  const fixTarget =
+    targetSec && bounds
+      ? targetSec < bounds.min
+        ? bounds.min
+        : targetSec > bounds.max
+          ? bounds.max
+          : null
+      : null;
 
   const cleanTime = normalizeClockTime(startTime);
-  const timeProblem = startTime.trim() && !cleanTime ? 'Heure de départ au format 8:30 ou 8h30.' : null;
+  const timeProblem =
+    startTime.trim() && !cleanTime
+      ? "Heure de départ au format 8:30 ou 8h30."
+      : null;
   const daysOk = days.length === sessions;
 
   const raceInfo =
-    when === 'race' && race
-      ? { name: race.name, city: race.city, startTime: cleanTime ?? race.startTime }
-      : raceName.trim()
-        ? { name: raceName.trim().slice(0, 80), startTime: cleanTime ?? undefined }
-        : cleanTime
-          ? { name: `${distanceLabel(km)} du ${formatDateFr(eventDate, { day: 'numeric', month: 'long' })}`, startTime: cleanTime }
-          : undefined;
+    when === "race" && race
+      ? {
+          name: race.name,
+          city: race.city,
+          startTime: cleanTime ?? race.startTime,
+        }
+      : cleanTime
+        ? {
+            name: `${distanceLabel(km)} du ${formatDateFr(eventDate, { day: "numeric", month: "long" })}`,
+            startTime: cleanTime,
+          }
+        : undefined;
 
   const request: PlanRequest | null =
-    currentLevel && kmOk && !targetProblem && !timeProblem && eventDate > today && (when === 'date' || race)
+    currentLevel &&
+    kmOk &&
+    !targetProblem &&
+    !timeProblem &&
+    eventDate > today &&
+    (when === "date" || race)
       ? {
-          goal: { mode, sport: 'running', distanceKm: km, targetTimeSec: mode === 'chrono' ? targetSec! : undefined, eventDate, race: raceInfo },
+          goal: {
+            mode,
+            sport: "running",
+            distanceKm: km,
+            targetTimeSec: mode === "chrono" ? targetSec! : undefined,
+            eventDate,
+            race: raceInfo,
+          },
           level: currentLevel,
           sessionsPerWeek: sessions,
           startDate: start,
@@ -220,49 +363,86 @@ export default function GoalScreen() {
           athlete,
         }
       : null;
-  const assessment = request ? assessGoal(request.goal, request.level, start, opts) : null;
-  const objLevel = objectiveLevel({ mode, distanceKm: kmOk ? km : 10, targetTimeSec: targetSec ?? undefined });
+  const assessment = request
+    ? assessGoal(request.goal, request.level, start, opts)
+    : null;
+  const objLevel = objectiveLevel({
+    mode,
+    distanceKm: kmOk ? km : 10,
+    targetTimeSec: targetSec ?? undefined,
+  });
 
-  const confidenceFor = (k: number, sec: number | undefined, n: SessionsPerWeek = sessions) =>
+  const confidenceFor = (
+    k: number,
+    sec: number | undefined,
+    n: SessionsPerWeek = sessions,
+  ) =>
     currentLevel
-      ? assessGoal({ mode: sec ? 'chrono' : 'distance', sport: 'running', distanceKm: k, targetTimeSec: sec, eventDate }, currentLevel, start, { sessionsPerWeek: n, athlete }).confidence
+      ? assessGoal(
+          {
+            mode: sec ? "chrono" : "distance",
+            sport: "running",
+            distanceKm: k,
+            targetTimeSec: sec,
+            eventDate,
+          },
+          currentLevel,
+          start,
+          { sessionsPerWeek: n, athlete },
+        ).confidence
       : null;
 
   // ---------- Validation des étapes ----------
   const stepProblem = (i: number): string | null => {
     if (i === 0) return weightError(weightKg) ?? heightError(heightCm);
     if (i === 1) {
-      if (refSource === 'run' && !run) return 'Choisis une de tes courses, ou saisis un chrono.';
-      if (refSource === 'manual' && !manualSec) return 'Indique ton chrono, par exemple 52:30.';
-      if (refSource === 'manual' && !currentLevel) return 'Ce chrono semble impossible : vérifie-le.';
+      if (refSource === "run" && !run)
+        return "Choisis une de tes courses, ou saisis un chrono.";
+      if (refSource === "manual" && !manualSec)
+        return "Indique ton chrono, par exemple 52:30.";
+      if (refSource === "manual" && !currentLevel)
+        return "Ce chrono semble impossible : vérifie-le.";
       return null;
     }
     if (i === 2) {
-      if (!kmOk) return 'Indique une distance entre 1 et 100 km.';
+      if (!kmOk) return "Indique une distance entre 1 et 100 km.";
       return targetProblem;
     }
     if (i === 3) {
-      if (when === 'race' && !race) return 'Choisis ta course, ou passe sur « Je choisis la date ».';
-      if (eventDate <= today) return 'Le jour J doit être dans le futur.';
+      if (when === "race" && !race)
+        return "Choisis ta course, ou passe sur « Je choisis la date ».";
+      if (eventDate <= today) return "Le jour J doit être dans le futur.";
       return timeProblem;
     }
-    if (i === 4) return daysOk ? null : `Choisis ${sessions} jour${sessions > 1 ? 's' : ''} d’entraînement.`;
-    return request ? null : (targetProblem ?? 'Vérifie les étapes précédentes.');
+    if (i === 4)
+      return daysOk
+        ? null
+        : `Choisis ${sessions} jour${sessions > 1 ? "s" : ""} d’entraînement.`;
+    return request
+      ? null
+      : (targetProblem ?? "Vérifie les étapes précédentes.");
   };
   const problem = stepProblem(step);
 
   const next = () => {
     setTried(true);
     if (problem) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(
+        () => {},
+      );
       return;
     }
     Haptics.selectionAsync().catch(() => {});
-    if (step === 0 && ((weightKg ?? undefined) !== saved.weightKg || (heightCm ?? undefined) !== saved.heightCm)) {
+    if (
+      step === 0 &&
+      ((weightKg ?? undefined) !== saved.weightKg ||
+        (heightCm ?? undefined) !== saved.heightCm)
+    ) {
       saveAthlete({ weightKg, heightCm }).catch(() => {});
     }
     // À l'arrivée sur l'objectif : on pré-remplit le chrono réaliste si rien n'est choisi.
-    if (step === 1 && !targetText && base) setTargetText(formatTime(base.achievable.likelySec));
+    if (step === 1 && !targetText && base)
+      setTargetText(formatTime(base.achievable.likelySec));
     setStep((s) => Math.min(STEPS.length - 1, s + 1));
   };
 
@@ -270,19 +450,36 @@ export default function GoalScreen() {
     Haptics.selectionAsync().catch(() => {});
     setPreset(p.id);
     setDistance(p.km);
-    setMode(p.sec ? 'chrono' : 'distance');
+    setMode(p.sec ? "chrono" : "distance");
     if (p.sec) setTargetText(formatTime(p.sec));
-    if (raceId && !RACE_CALENDAR.find((r) => r.id === raceId)?.distances.some((d) => sameKm(d, p.km))) setRaceId(null);
+    if (
+      raceId &&
+      !RACE_CALENDAR.find((r) => r.id === raceId)?.distances.some((d) =>
+        sameKm(d, p.km),
+      )
+    )
+      setRaceId(null);
   };
   const pickCustom = () => {
-    setPreset('custom');
-    if (base && !targetText) setTargetText(formatTime(base.achievable.likelySec));
+    // Deuxième appui : on referme (et on désélectionne).
+    if (preset === "custom") {
+      setPreset(null);
+      return;
+    }
+    setPreset("custom");
+    if (base && !targetText)
+      setTargetText(formatTime(base.achievable.likelySec));
   };
   const pickSessions = (n: SessionsPerWeek) => {
     setSessions(n);
     setDays(DAY_SETS[n]);
   };
-  const toggleDay = (d: number) => setDays((cur) => (cur.includes(d) ? cur.filter((x) => x !== d) : [...cur, d].slice(-sessions)));
+  const toggleDay = (d: number) =>
+    setDays((cur) =>
+      cur.includes(d)
+        ? cur.filter((x) => x !== d)
+        : [...cur, d].slice(-sessions),
+    );
 
   const submit = async () => {
     setTried(true);
@@ -290,13 +487,14 @@ export default function GoalScreen() {
     setSaving(true);
     setError(null);
     try {
-      const id = await createPlan(request);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      router.dismiss();
-      router.push({ pathname: '/plan/[id]', params: { id } });
+      setCreated(await createPlan(request));
     } catch (e) {
-      const code = String((e as { message?: string })?.message ?? '');
-      setError(code.includes('too_many_active_plans') ? `Tu as déjà ${MAX_ACTIVE_PLANS} objectifs en cours.` : 'Le plan n’a pas pu être créé. Vérifie ta connexion et réessaie.');
+      const code = String((e as { message?: string })?.message ?? "");
+      setError(
+        code.includes("too_many_active_plans")
+          ? `Tu as déjà ${MAX_ACTIVE_PLANS} objectifs en cours.`
+          : "Le plan n’a pas pu être créé. Vérifie ta connexion et réessaie.",
+      );
     } finally {
       setSaving(false);
     }
@@ -306,8 +504,59 @@ export default function GoalScreen() {
   const isLast = step === STEPS.length - 1;
 
   // ---------- Rendu ----------
+  if (created) {
+    const n = request?.sessionsPerWeek ?? sessions;
+    return (
+      <>
+        <Stack.Screen options={{ headerShown: false, gestureEnabled: false }} />
+        <GoalCelebration
+          title={
+            raceInfo?.name
+              ? `Cap sur ${raceInfo.name} !`
+              : "Ton plan est prêt !"
+          }
+          subtitle={
+            mode === "chrono" && targetSec
+              ? `${distanceLabel(km)} en ${formatTime(targetSec)} : chaque séance te rapproche de ton chrono.`
+              : `Objectif : finir ${distanceLabel(km)}. Une séance après l’autre, tu vas y arriver.`
+          }
+          stats={[
+            {
+              icon: "calendar",
+              label: `Jour J : ${formatDateFr(eventDate, { weekday: "long", day: "numeric", month: "long" })} (J-${daysBetween(today, eventDate)})`,
+            },
+            {
+              icon: "repeat",
+              label: `${planWeeks} semaine${planWeeks > 1 ? "s" : ""} · ${n} séance${n > 1 ? "s" : ""} par semaine`,
+            },
+            ...(assessment
+              ? [
+                  {
+                    icon: "speedometer" as const,
+                    label: `${assessment.confidence} % de chances : ${assessment.title.toLowerCase()}`,
+                  },
+                ]
+              : []),
+            {
+              icon: "flag",
+              label: `Début du plan : ${formatDateFr(start, { weekday: "long", day: "numeric", month: "long" })}`,
+            },
+          ]}
+          onDone={() => {
+            router.dismiss();
+            router.push({ pathname: "/plan/[id]", params: { id: created } });
+          }}
+        />
+      </>
+    );
+  }
+
   return (
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: t.background }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={60}>
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: t.background }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={60}
+    >
       {/* Progression */}
       <View style={[styles.progressWrap, { backgroundColor: t.background }]}>
         <View style={styles.progress}>
@@ -319,7 +568,10 @@ export default function GoalScreen() {
               disabled={i > step}
               onPress={() => setStep(i)}
               hitSlop={6}
-              style={[styles.seg, { backgroundColor: i <= step ? t.accent : t.line }]}
+              style={[
+                styles.seg,
+                { backgroundColor: i <= step ? t.accent : t.line },
+              ]}
             />
           ))}
         </View>
@@ -328,45 +580,83 @@ export default function GoalScreen() {
         </Txt>
       </View>
 
-      <ScrollView ref={scroll} contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+      <ScrollView
+        ref={scroll}
+        contentContainerStyle={styles.page}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+      >
         {step === 0 && (
           <>
-            <Heading title="Parlons de toi" sub="Ton âge et ta corpulence ajustent la charge d’entraînement et l’estimation de ta progression. C’est facultatif." />
+            <Heading
+              title="Parlons de toi"
+              sub="Ton âge et ta corpulence ajustent la charge d’entraînement et l’estimation de ta progression. C’est facultatif."
+            />
             <Card>
               <View style={styles.row}>
-                <Field label="Poids" unit="kg" value={weight} onChange={setWeight} keyboardType="decimal-pad" placeholder="—" flex big />
-                <Field label="Taille" unit="cm" value={height} onChange={setHeight} keyboardType="number-pad" placeholder="—" flex big />
+                <Field
+                  label="Poids"
+                  unit="kg"
+                  value={weight}
+                  onChange={setWeight}
+                  keyboardType="decimal-pad"
+                  placeholder="—"
+                  flex
+                  big
+                />
+                <Field
+                  label="Taille"
+                  unit="cm"
+                  value={height}
+                  onChange={setHeight}
+                  keyboardType="number-pad"
+                  placeholder="—"
+                  flex
+                  big
+                />
               </View>
               <View style={[styles.infoRow, { backgroundColor: t.surfaceAlt }]}>
-                <Ionicons name="person-outline" size={16} color={t.textSecondary} />
+                <Ionicons
+                  name="person-outline"
+                  size={16}
+                  color={t.textSecondary}
+                />
                 <Txt variant="caption" muted style={{ flex: 1 }}>
-                  {saved.age ? `${saved.age} ans, d’après ta date de naissance.` : 'Ton âge vient de ta date de naissance (compte Foulée).'}
+                  {saved.age
+                    ? `${saved.age} ans, d’après ta date de naissance.`
+                    : "Ton âge vient de ta date de naissance (compte Foulée)."}
                 </Txt>
               </View>
             </Card>
-            <Txt variant="caption" muted style={{ textAlign: 'center' }}>
-              Ces données restent privées et servent uniquement à doser ton plan.
+            <Txt variant="caption" muted style={{ textAlign: "center" }}>
+              Ces données restent privées et servent uniquement à doser ton
+              plan.
             </Txt>
           </>
         )}
 
         {step === 1 && (
           <>
-            <Heading title="Ta dernière performance" sub="Le point de départ de tout le plan : tes allures sont calculées à partir de là." />
+            <Heading
+              title="Ta dernière performance"
+              sub="Le point de départ de tout le plan : tes allures sont calculées à partir de là."
+            />
             <Segment
               options={[
-                ...(recent.length ? [{ value: 'run', label: 'Mes courses' }] : []),
-                { value: 'manual', label: 'Un chrono' },
-                { value: 'estimate', label: 'Pas de chrono' },
+                ...(recent.length
+                  ? [{ value: "run", label: "Mes courses" }]
+                  : []),
+                { value: "manual", label: "Un chrono" },
+                { value: "estimate", label: "Pas de chrono" },
               ]}
               value={refSource}
               onChange={(v) => {
                 setRefSource(v as RefSource);
-                if (v === 'run' && !runId) setRunId(recent[0]?.id ?? null);
+                if (v === "run" && !runId) setRunId(recent[0]?.id ?? null);
               }}
             />
 
-            {refSource === 'run' && (
+            {refSource === "run" && (
               <Card>
                 <Txt variant="caption" muted>
                   Tes dernières courses
@@ -379,43 +669,92 @@ export default function GoalScreen() {
                       accessibilityRole="radio"
                       accessibilityState={{ selected: on }}
                       onPress={() => setRunId(r.id)}
-                      style={[styles.option, { backgroundColor: on ? t.accentSoft : t.surfaceAlt, borderColor: on ? t.accent : 'transparent' }]}>
+                      style={[
+                        styles.option,
+                        {
+                          backgroundColor: on ? t.accentSoft : t.surfaceAlt,
+                          borderColor: on ? t.accent : "transparent",
+                        },
+                      ]}
+                    >
                       <View style={{ flex: 1 }}>
-                        <Txt style={{ fontWeight: '600' }} color={on ? t.accent : t.text}>
+                        <Txt
+                          style={{ fontWeight: "600" }}
+                          color={on ? t.accent : t.text}
+                        >
                           {kmLabel(r.distanceKm)} en {formatTime(r.durationSec)}
                         </Txt>
                         <Txt variant="caption" muted>
-                          {formatDateFr(r.date, { weekday: 'short', day: 'numeric', month: 'short' })} · {formatPace(r.durationSec / r.distanceKm)} /km
+                          {formatDateFr(r.date, {
+                            weekday: "short",
+                            day: "numeric",
+                            month: "short",
+                          })}{" "}
+                          · {formatPace(r.durationSec / r.distanceKm)} /km
                         </Txt>
                       </View>
-                      <Ionicons name={on ? 'radio-button-on' : 'radio-button-off'} size={20} color={on ? t.accent : t.textSecondary} />
+                      <Ionicons
+                        name={on ? "radio-button-on" : "radio-button-off"}
+                        size={20}
+                        color={on ? t.accent : t.textSecondary}
+                      />
                     </Pressable>
                   );
                 })}
                 <Txt variant="caption" muted>
-                  Prends ta course la plus représentative : un effort soutenu plutôt qu’un footing tranquille.
+                  Prends ta course la plus représentative : un effort soutenu
+                  plutôt qu’un footing tranquille.
                 </Txt>
               </Card>
             )}
 
-            {refSource === 'manual' && (
+            {refSource === "manual" && (
               <Card>
                 <Txt variant="caption" muted>
                   Distance
                 </Txt>
                 <View style={styles.wrap}>
                   {[5, 10, 21.0975, 42.195].map((d) => (
-                    <Pill key={d} label={d === 21.0975 ? 'Semi' : d === 42.195 ? 'Marathon' : `${d} km`} active={refKm === d} onPress={() => setRefKm(d)} />
+                    <Pill
+                      key={d}
+                      label={
+                        d === 21.0975
+                          ? "Semi"
+                          : d === 42.195
+                            ? "Marathon"
+                            : `${d} km`
+                      }
+                      active={refKm === d}
+                      onPress={() => setRefKm(d)}
+                    />
                   ))}
                 </View>
-                <TimeBox label="Ton chrono" value={refTime} onChange={setRefTime} placeholder={refKm === 5 ? '27:30' : refKm === 10 ? '55:00' : refKm < 30 ? '2:05:00' : '4:20:00'} hint={manualSec ? `${formatPace(manualSec / refKm)} /km` : 'ex. 52:30 · 1:58:00 · 1h58'} />
+                <TimeBox
+                  label="Ton chrono"
+                  value={refTime}
+                  onChange={setRefTime}
+                  placeholder={
+                    refKm === 5
+                      ? "27:30"
+                      : refKm === 10
+                        ? "55:00"
+                        : refKm < 30
+                          ? "2:05:00"
+                          : "4:20:00"
+                  }
+                  hint={
+                    manualSec
+                      ? `${formatPace(manualSec / refKm)} /km`
+                      : "ex. 52:30 · 1:58:00 · 1h58"
+                  }
+                />
                 <Txt variant="caption" muted>
                   Une course ou un test de moins de 3 mois.
                 </Txt>
               </Card>
             )}
 
-            {refSource === 'estimate' && (
+            {refSource === "estimate" && (
               <View style={styles.grid}>
                 {LEVELS.map((l) => {
                   const on = level === l.id;
@@ -425,9 +764,24 @@ export default function GoalScreen() {
                       accessibilityRole="radio"
                       accessibilityState={{ selected: on }}
                       onPress={() => setLevel(l.id)}
-                      style={[styles.tile, styles.shadow, { backgroundColor: on ? t.accentSoft : t.surface, borderColor: on ? t.accent : 'transparent' }]}>
-                      <Ionicons name={l.icon} size={20} color={on ? t.accent : t.textSecondary} />
-                      <Txt style={{ fontWeight: '600' }} color={on ? t.accent : t.text}>
+                      style={[
+                        styles.tile,
+                        styles.shadow,
+                        {
+                          backgroundColor: on ? t.accentSoft : t.surface,
+                          borderColor: on ? t.accent : "transparent",
+                        },
+                      ]}
+                    >
+                      <Ionicons
+                        name={l.icon}
+                        size={20}
+                        color={on ? t.accent : t.textSecondary}
+                      />
+                      <Txt
+                        style={{ fontWeight: "600" }}
+                        color={on ? t.accent : t.text}
+                      >
                         {l.label}
                       </Txt>
                       <Txt variant="caption" muted numberOfLines={2}>
@@ -441,10 +795,24 @@ export default function GoalScreen() {
 
             {currentLevel && (
               <View style={[styles.infoRow, { backgroundColor: t.accentSoft }]}>
-                <Ionicons name="speedometer-outline" size={16} color={t.accent} />
-                <Txt variant="caption" color={t.accent} style={{ flex: 1, fontWeight: '600' }}>
-                  Ton niveau aujourd’hui ≈ 10 km en {formatTime(riegel(currentPace10k(currentLevel) * 10, 10, 10))} · semi en{' '}
-                  {formatTime(riegel(currentPace10k(currentLevel) * 10, 10, 21.0975))}
+                <Ionicons
+                  name="speedometer-outline"
+                  size={16}
+                  color={t.accent}
+                />
+                <Txt
+                  variant="caption"
+                  color={t.accent}
+                  style={{ flex: 1, fontWeight: "600" }}
+                >
+                  Ton niveau aujourd’hui ≈ 10 km en{" "}
+                  {formatTime(
+                    riegel(currentPace10k(currentLevel) * 10, 10, 10),
+                  )}{" "}
+                  · semi en{" "}
+                  {formatTime(
+                    riegel(currentPace10k(currentLevel) * 10, 10, 21.0975),
+                  )}
                 </Txt>
               </View>
             )}
@@ -453,12 +821,19 @@ export default function GoalScreen() {
 
         {step === 2 && (
           <>
-            <Heading title="Quel est ton objectif ?" sub={`Chances estimées pour une course dans ${planWeeks} semaines, avec ${sessions} séance${sessions > 1 ? 's' : ''} par semaine. Tu ajusteras ensuite.`} />
+            <Heading
+              title="Quel est ton objectif ?"
+              sub={`Chances estimées pour une course dans ${planWeeks} semaines, avec ${sessions} séance${sessions > 1 ? "s" : ""} par semaine. Tu ajusteras ensuite.`}
+            />
             <View style={styles.grid}>
               {PRESETS.map((p) => {
                 const on = preset === p.id;
                 const conf = confidenceFor(p.km, p.sec);
-                const lvl = objectiveLevel({ mode: p.sec ? 'chrono' : 'distance', distanceKm: p.km, targetTimeSec: p.sec });
+                const lvl = objectiveLevel({
+                  mode: p.sec ? "chrono" : "distance",
+                  distanceKm: p.km,
+                  targetTimeSec: p.sec,
+                });
                 return (
                   <Pressable
                     key={p.id}
@@ -469,16 +844,27 @@ export default function GoalScreen() {
                     style={({ pressed }) => [
                       styles.preset,
                       styles.shadow,
-                      { backgroundColor: on ? t.accentSoft : t.surface, borderColor: on ? t.accent : 'transparent', transform: [{ scale: pressed ? 0.98 : 1 }] },
-                    ]}>
+                      {
+                        backgroundColor: on ? t.accentSoft : t.surface,
+                        borderColor: on ? t.accent : "transparent",
+                        transform: [{ scale: pressed ? 0.98 : 1 }],
+                      },
+                    ]}
+                  >
                     <View style={styles.rowBetween}>
                       <LevelBars level={lvl} />
                       {conf != null && <ConfBadge c={conf} />}
                     </View>
-                    <Txt style={styles.presetTitle} color={on ? t.accent : t.text}>
+                    <Txt
+                      style={styles.presetTitle}
+                      color={on ? t.accent : t.text}
+                    >
                       {p.title}
                     </Txt>
-                    <Txt style={{ fontWeight: '600' }} color={on ? t.accent : t.textSecondary}>
+                    <Txt
+                      style={{ fontWeight: "600" }}
+                      color={on ? t.accent : t.textSecondary}
+                    >
                       {p.sub}
                     </Txt>
                   </Pressable>
@@ -488,34 +874,68 @@ export default function GoalScreen() {
 
             <Pressable
               accessibilityRole="radio"
-              accessibilityState={{ selected: preset === 'custom' }}
+              accessibilityState={{ selected: preset === "custom" }}
               onPress={pickCustom}
-              style={[styles.option, styles.shadow, { backgroundColor: preset === 'custom' ? t.accentSoft : t.surface, borderColor: preset === 'custom' ? t.accent : 'transparent' }]}>
+              style={[
+                styles.option,
+                styles.shadow,
+                {
+                  backgroundColor:
+                    preset === "custom" ? t.accentSoft : t.surface,
+                  borderColor: preset === "custom" ? t.accent : "transparent",
+                },
+              ]}
+            >
               <Ionicons name="options-outline" size={20} color={t.accent} />
-              <Txt style={{ fontWeight: '600', flex: 1 }} color={t.accent}>
+              <Txt style={{ fontWeight: "600", flex: 1 }} color={t.accent}>
                 Objectif sur mesure
               </Txt>
-              <Ionicons name={preset === 'custom' ? 'chevron-up' : 'chevron-down'} size={16} color={t.accent} />
+              <Ionicons
+                name={preset === "custom" ? "chevron-up" : "chevron-down"}
+                size={16}
+                color={t.accent}
+              />
             </Pressable>
 
-            {preset === 'custom' && (
+            {preset === "custom" && (
               <Card>
                 <Segment
                   options={[
-                    { value: 'chrono', label: 'Un chrono', icon: 'stopwatch-outline' },
-                    { value: 'distance', label: 'Finir', icon: 'flag-outline' },
+                    {
+                      value: "chrono",
+                      label: "Un chrono",
+                      icon: "stopwatch-outline",
+                    },
+                    { value: "distance", label: "Finir", icon: "flag-outline" },
                   ]}
                   value={mode}
                   onChange={(v) => setMode(v as GoalMode)}
                 />
                 <View style={styles.wrap}>
                   {DISTANCES.map((d) => (
-                    <Pill key={d.km} label={d.label} active={distance === d.km} onPress={() => setDistance(d.km)} />
+                    <Pill
+                      key={d.km}
+                      label={d.label}
+                      active={distance === d.km}
+                      onPress={() => setDistance(d.km)}
+                    />
                   ))}
-                  <Pill label="Autre" active={distance === 'autre'} onPress={() => setDistance('autre')} />
+                  <Pill
+                    label="Autre"
+                    active={distance === "autre"}
+                    onPress={() => setDistance("autre")}
+                  />
                 </View>
-                {distance === 'autre' && <Field label="Distance" unit="km" value={otherKm} onChange={setOtherKm} keyboardType="decimal-pad" />}
-                {mode === 'chrono' && (
+                {distance === "autre" && (
+                  <Field
+                    label="Distance"
+                    unit="km"
+                    value={otherKm}
+                    onChange={setOtherKm}
+                    keyboardType="decimal-pad"
+                  />
+                )}
+                {mode === "chrono" && (
                   <>
                     <TimeBox
                       label="Temps visé"
@@ -524,7 +944,11 @@ export default function GoalScreen() {
                         setTargetText(v);
                       }}
                       placeholder="45:00"
-                      hint={targetSec && kmOk ? `${formatPace(targetSec / km)} /km${base ? ` · niveau actuel ≈ ${formatTime(base.predictedNowSec)}` : ''}` : 'ex. 45:00 · 1:45:00 · 1h45'}
+                      hint={
+                        targetSec && kmOk
+                          ? `${formatPace(targetSec / km)} /km${base ? ` · niveau actuel ≈ ${formatTime(base.predictedNowSec)}` : ""}`
+                          : "ex. 45:00 · 1:45:00 · 1h45"
+                      }
                       error={!!targetProblem && tried}
                     />
                     {base && (
@@ -537,12 +961,29 @@ export default function GoalScreen() {
                               key={s.label}
                               accessibilityRole="button"
                               accessibilityLabel={`${s.label} : ${formatTime(s.timeSec)}`}
-                              onPress={() => setTargetText(formatTime(s.timeSec))}
-                              style={[styles.suggest, { backgroundColor: on ? t.accentSoft : t.surfaceAlt, borderColor: on ? t.accent : 'transparent' }]}>
-                              <Txt variant="caption" color={on ? t.accent : t.textSecondary} style={{ fontWeight: '600' }}>
+                              onPress={() =>
+                                setTargetText(formatTime(s.timeSec))
+                              }
+                              style={[
+                                styles.suggest,
+                                {
+                                  backgroundColor: on
+                                    ? t.accentSoft
+                                    : t.surfaceAlt,
+                                  borderColor: on ? t.accent : "transparent",
+                                },
+                              ]}
+                            >
+                              <Txt
+                                variant="caption"
+                                color={on ? t.accent : t.textSecondary}
+                                style={{ fontWeight: "600" }}
+                              >
                                 {s.label}
                               </Txt>
-                              <Txt style={styles.suggestTime}>{formatTime(s.timeSec)}</Txt>
+                              <Txt style={styles.suggestTime}>
+                                {formatTime(s.timeSec)}
+                              </Txt>
                               {c != null && <ConfBadge c={c} small />}
                             </Pressable>
                           );
@@ -554,25 +995,48 @@ export default function GoalScreen() {
               </Card>
             )}
 
-            {targetProblem && preset && (tried || preset !== 'custom') ? <Notice text={targetProblem} fix={fixTarget} onFix={(v) => setTargetText(formatTime(v))} /> : null}
+            {targetProblem && preset && (tried || preset !== "custom") ? (
+              <Notice
+                text={targetProblem}
+                fix={fixTarget}
+                onFix={(v) => setTargetText(formatTime(v))}
+              />
+            ) : null}
           </>
         )}
 
         {step === 3 && (
           <>
-            <Heading title="Quand est ta course ?" sub="Choisis une course officielle, ou fixe simplement la date de ton défi." />
+            <Heading
+              title="Quand est ta course ?"
+              sub="Choisis une course officielle, ou fixe simplement la date de ton défi."
+            />
             <Segment
               options={[
-                { value: 'race', label: 'Une course officielle', icon: 'trophy-outline' },
-                { value: 'date', label: 'Je choisis la date', icon: 'calendar-outline' },
+                {
+                  value: "race",
+                  label: "Une course officielle",
+                  icon: "trophy-outline",
+                },
+                {
+                  value: "date",
+                  label: "Je choisis la date",
+                  icon: "calendar-outline",
+                },
               ]}
               value={when}
               onChange={(v) => setWhen(v as When)}
             />
 
-            {when === 'race' ? (
+            {when === "race" ? (
               <>
-                <View style={[styles.search, { backgroundColor: t.surface }, styles.shadow]}>
+                <View
+                  style={[
+                    styles.search,
+                    { backgroundColor: t.surface },
+                    styles.shadow,
+                  ]}
+                >
                   <Ionicons name="search" size={18} color={t.textSecondary} />
                   <TextInput
                     accessibilityLabel="Rechercher une course"
@@ -586,11 +1050,21 @@ export default function GoalScreen() {
                 </View>
                 {races.length === 0 ? (
                   <Card>
-                    <Txt style={{ fontWeight: '600' }}>Aucune course trouvée {kmOk ? `sur ${distanceLabel(km)}` : ''}</Txt>
-                    <Txt variant="caption" muted>
-                      Notre calendrier s’enrichit chaque semaine. En attendant, choisis la date toi-même et donne le nom de ta course.
+                    <Txt style={{ fontWeight: "600" }}>
+                      Aucune course trouvée{" "}
+                      {kmOk ? `sur ${distanceLabel(km)}` : ""}
                     </Txt>
-                    <Button kind="secondary" small icon="calendar-outline" label="Je choisis la date" onPress={() => setWhen('date')} />
+                    <Txt variant="caption" muted>
+                      Notre calendrier s’enrichit chaque semaine. En attendant,
+                      choisis la date toi-même et donne le nom de ta course.
+                    </Txt>
+                    <Button
+                      kind="secondary"
+                      small
+                      icon="calendar-outline"
+                      label="Je choisis la date"
+                      onPress={() => setWhen("date")}
+                    />
                   </Card>
                 ) : (
                   races.map((r) => {
@@ -605,21 +1079,50 @@ export default function GoalScreen() {
                           setRaceId(r.id);
                           if (r.startTime) setStartTime(r.startTime);
                         }}
-                        style={[styles.raceRow, styles.shadow, { backgroundColor: on ? t.accentSoft : t.surface, borderColor: on ? t.accent : 'transparent' }]}>
-                        <View style={[styles.dateBadge, { backgroundColor: on ? t.accent : t.surfaceAlt }]}>
-                          <Txt style={styles.dateDay} color={on ? t.accentText : t.text}>
+                        style={[
+                          styles.raceRow,
+                          styles.shadow,
+                          {
+                            backgroundColor: on ? t.accentSoft : t.surface,
+                            borderColor: on ? t.accent : "transparent",
+                          },
+                        ]}
+                      >
+                        <View
+                          style={[
+                            styles.dateBadge,
+                            { backgroundColor: on ? t.accent : t.surfaceAlt },
+                          ]}
+                        >
+                          <Txt
+                            style={styles.dateDay}
+                            color={on ? t.accentText : t.text}
+                          >
                             {Number(r.date.slice(8, 10))}
                           </Txt>
-                          <Txt variant="caption" color={on ? t.accentText : t.textSecondary}>
-                            {formatDateFr(r.date, { month: 'short' }).replace('.', '')}
+                          <Txt
+                            variant="caption"
+                            color={on ? t.accentText : t.textSecondary}
+                          >
+                            {formatDateFr(r.date, { month: "short" }).replace(
+                              ".",
+                              "",
+                            )}
                           </Txt>
                         </View>
                         <View style={{ flex: 1, gap: 2 }}>
-                          <Txt style={{ fontWeight: '600' }} color={on ? t.accent : t.text}>
+                          <Txt
+                            style={{ fontWeight: "600" }}
+                            color={on ? t.accent : t.text}
+                          >
                             {r.name}
                           </Txt>
                           <Txt variant="caption" muted>
-                            {r.city} · {r.distances.map((d) => distanceLabel(d)).join(', ')} · {w} sem.
+                            {r.city} ·{" "}
+                            {r.distances
+                              .map((d) => distanceLabel(d))
+                              .join(", ")}{" "}
+                            · {w} sem.
                           </Txt>
                           {!r.confirmed && (
                             <Txt variant="caption" color={t.warn}>
@@ -627,7 +1130,11 @@ export default function GoalScreen() {
                             </Txt>
                           )}
                         </View>
-                        <Ionicons name={on ? 'radio-button-on' : 'radio-button-off'} size={20} color={on ? t.accent : t.textSecondary} />
+                        <Ionicons
+                          name={on ? "radio-button-on" : "radio-button-off"}
+                          size={20}
+                          color={on ? t.accent : t.textSecondary}
+                        />
                       </Pressable>
                     );
                   })
@@ -635,40 +1142,69 @@ export default function GoalScreen() {
               </>
             ) : (
               <Card>
-                <View style={[styles.stepper, { backgroundColor: t.surfaceAlt }]}>
-                  <RoundBtn icon="remove" label="Une semaine plus tôt" disabled={weeks <= 1} onPress={() => setWeeks((w) => Math.max(1, w - 1))} />
-                  <View style={{ alignItems: 'center', flex: 1 }}>
+                <View
+                  style={[styles.stepper, { backgroundColor: t.surfaceAlt }]}
+                >
+                  <RoundBtn
+                    icon="remove"
+                    label="Une semaine plus tôt"
+                    disabled={weeks <= 1}
+                    onPress={() => setWeeks((w) => Math.max(1, w - 1))}
+                  />
+                  <View style={{ alignItems: "center", flex: 1 }}>
                     <Txt style={styles.stepValue}>{weeks}</Txt>
                     <Txt variant="caption" muted>
-                      semaine{weeks > 1 ? 's' : ''} de préparation
+                      semaine{weeks > 1 ? "s" : ""} de préparation
                     </Txt>
                   </View>
-                  <RoundBtn icon="add" label="Une semaine plus tard" disabled={weeks >= MAX_WEEKS} onPress={() => setWeeks((w) => Math.min(MAX_WEEKS, w + 1))} />
+                  <RoundBtn
+                    icon="add"
+                    label="Une semaine plus tard"
+                    disabled={weeks >= MAX_WEEKS}
+                    onPress={() => setWeeks((w) => Math.min(MAX_WEEKS, w + 1))}
+                  />
                 </View>
                 <Txt variant="caption" muted>
                   Jour de la course
                 </Txt>
                 <DayPicker selected={[raceDow]} onToggle={setRaceDow} />
-                <Field label="Nom de la course (facultatif)" value={raceName} onChange={setRaceName} keyboardType="default" placeholder="ex. Semi de ma ville" />
               </Card>
             )}
 
-            {(when === 'date' || race) && (
+            {(when === "date" || race) && (
               <Card>
                 <View style={styles.rowBetween}>
                   <View style={{ flex: 1 }}>
                     <Txt variant="caption" muted>
                       Jour J
                     </Txt>
-                    <Txt style={{ fontWeight: '700', fontSize: 17 }}>{formatDateFr(eventDate, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</Txt>
+                    <Txt style={{ fontWeight: "700", fontSize: 17 }}>
+                      {formatDateFr(eventDate, {
+                        weekday: "long",
+                        day: "numeric",
+                        month: "long",
+                        year: "numeric",
+                      })}
+                    </Txt>
                   </View>
-                  <Txt variant="caption" color={t.accent} style={{ fontWeight: '600' }}>
+                  <Txt
+                    variant="caption"
+                    color={t.accent}
+                    style={{ fontWeight: "600" }}
+                  >
                     J-{daysBetween(today, eventDate)}
                   </Txt>
                 </View>
-                <Field label="Heure de départ (facultatif)" value={startTime} onChange={setStartTime} keyboardType="numbers-and-punctuation" placeholder="8:30" />
+                <Field
+                  label="Heure de départ (facultatif)"
+                  value={startTime}
+                  onChange={setStartTime}
+                  keyboardType="numbers-and-punctuation"
+                  placeholder="8:30"
+                />
                 <Txt variant="caption" muted>
-                  Elle sert à caler ton petit-déjeuner et ton échauffement la semaine de course.
+                  Elle sert à caler ton petit-déjeuner et ton échauffement la
+                  semaine de course.
                 </Txt>
               </Card>
             )}
@@ -677,10 +1213,17 @@ export default function GoalScreen() {
 
         {step === 4 && (
           <>
-            <Heading title="Ton rythme" sub="Combien de séances peux-tu vraiment faire par semaine ? Mieux vaut 3 séances tenues que 5 abandonnées." />
+            <Heading
+              title="Ton rythme"
+              sub="Combien de séances peux-tu vraiment faire par semaine ? Mieux vaut 3 séances tenues que 5 abandonnées."
+            />
             <Card>
               <Segment
-                options={([1, 2, 3, 4, 5] as SessionsPerWeek[]).map((n) => ({ value: String(n), label: String(n), a11y: `${n} séance${n > 1 ? 's' : ''} par semaine` }))}
+                options={([1, 2, 3, 4, 5] as SessionsPerWeek[]).map((n) => ({
+                  value: String(n),
+                  label: String(n),
+                  a11y: `${n} séance${n > 1 ? "s" : ""} par semaine`,
+                }))}
                 value={String(sessions)}
                 onChange={(v) => pickSessions(Number(v) as SessionsPerWeek)}
               />
@@ -688,7 +1231,11 @@ export default function GoalScreen() {
                 <Txt variant="caption" muted>
                   Tes jours d’entraînement
                 </Txt>
-                <Txt variant="caption" color={daysOk ? t.ok : t.warn} style={{ fontWeight: '600' }}>
+                <Txt
+                  variant="caption"
+                  color={daysOk ? t.ok : t.warn}
+                  style={{ fontWeight: "600" }}
+                >
                   {days.length}/{sessions}
                 </Txt>
               </View>
@@ -697,10 +1244,29 @@ export default function GoalScreen() {
             {request && (
               <View style={styles.wrap}>
                 {([1, 2, 3, 4, 5] as SessionsPerWeek[]).map((n) => {
-                  const c = confidenceFor(km, mode === 'chrono' ? (targetSec ?? undefined) : undefined, n);
+                  const c = confidenceFor(
+                    km,
+                    mode === "chrono" ? (targetSec ?? undefined) : undefined,
+                    n,
+                  );
                   return c == null ? null : (
-                    <Pressable key={n} accessibilityRole="button" onPress={() => pickSessions(n)} style={[styles.miniConf, { backgroundColor: n === sessions ? t.accentSoft : t.surfaceAlt }]}>
-                      <Txt variant="caption" color={n === sessions ? t.accent : t.textSecondary} style={{ fontWeight: '600' }}>
+                    <Pressable
+                      key={n}
+                      accessibilityRole="button"
+                      onPress={() => pickSessions(n)}
+                      style={[
+                        styles.miniConf,
+                        {
+                          backgroundColor:
+                            n === sessions ? t.accentSoft : t.surfaceAlt,
+                        },
+                      ]}
+                    >
+                      <Txt
+                        variant="caption"
+                        color={n === sessions ? t.accent : t.textSecondary}
+                        style={{ fontWeight: "600" }}
+                      >
                         {n}× · {c} %
                       </Txt>
                     </Pressable>
@@ -729,56 +1295,99 @@ export default function GoalScreen() {
             race={raceInfo}
             plansCount={plans.length}
             assessment={assessment}
-            problem={request ? null : (targetProblem ?? stepProblem(1) ?? stepProblem(3))}
+            problem={
+              request
+                ? null
+                : (targetProblem ?? stepProblem(1) ?? stepProblem(3))
+            }
             fix={fixTarget}
             onFix={(v) => setTargetText(formatTime(v))}
             goTo={setStep}
             levelText={
-              refSource === 'run' && run
+              refSource === "run" && run
                 ? `${kmLabel(run.distanceKm)} en ${formatTime(run.durationSec)}`
-                : refSource === 'manual' && manualSec
+                : refSource === "manual" && manualSec
                   ? `${distanceLabel(refKm)} en ${formatTime(manualSec)}`
-                  : (LEVELS.find((l) => l.id === level)?.label ?? '')
+                  : (LEVELS.find((l) => l.id === level)?.label ?? "")
             }
-            athleteText={[saved.age ? `${saved.age} ans` : null, athlete.weightKg ? `${athlete.weightKg} kg` : null, athlete.heightCm ? `${athlete.heightCm} cm` : null].filter(Boolean).join(' · ') || 'Non renseigné'}
-            onLever={(kind) => (kind === 'sessions' ? pickSessions(Math.min(5, sessions + 1) as SessionsPerWeek) : when === 'date' ? setWeeks((w) => Math.min(MAX_WEEKS, w + 4)) : null)}
-            canAddWeeks={when === 'date' && weeks + 4 <= MAX_WEEKS}
+            athleteText={
+              [
+                saved.age ? `${saved.age} ans` : null,
+                athlete.weightKg ? `${athlete.weightKg} kg` : null,
+                athlete.heightCm ? `${athlete.heightCm} cm` : null,
+              ]
+                .filter(Boolean)
+                .join(" · ") || "Non renseigné"
+            }
+            onLever={(kind) =>
+              kind === "sessions"
+                ? pickSessions(Math.min(5, sessions + 1) as SessionsPerWeek)
+                : when === "date"
+                  ? setWeeks((w) => Math.min(MAX_WEEKS, w + 4))
+                  : null
+            }
+            canAddWeeks={when === "date" && weeks + 4 <= MAX_WEEKS}
             request={request}
             athlete={athlete}
             start={start}
           />
         )}
 
-        {tried && problem && step < 5 && step !== 2 ? <Notice text={problem} /> : null}
-        {tried && problem && step === 2 && !targetProblem ? <Notice text={problem} /> : null}
+        {tried && problem && step < 5 && step !== 2 ? (
+          <Notice text={problem} />
+        ) : null}
+        {tried && problem && step === 2 && !targetProblem ? (
+          <Notice text={problem} />
+        ) : null}
         {error && <Notice text={error} />}
       </ScrollView>
 
       {/* Barre d'actions */}
-      <View style={[styles.actionBar, { backgroundColor: t.background, borderTopColor: t.line, paddingBottom: Math.max(insets.bottom, Spacing.m) }]}>
+      <View
+        style={[
+          styles.actionBar,
+          {
+            backgroundColor: t.background,
+            borderTopColor: t.line,
+            paddingBottom: Math.max(insets.bottom, Spacing.m),
+          },
+        ]}
+      >
         {step > 0 && (
-          <Pressable accessibilityRole="button" accessibilityLabel="Étape précédente" onPress={() => setStep((s) => Math.max(0, s - 1))} style={[styles.back, { backgroundColor: t.surfaceAlt }]}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Étape précédente"
+            onPress={() => setStep((s) => Math.max(0, s - 1))}
+            style={[styles.back, { backgroundColor: t.surfaceAlt }]}
+          >
             <Ionicons name="chevron-back" size={22} color={t.text} />
           </Pressable>
         )}
         <View style={{ flex: 1 }}>
           {isLast ? (
             <Button
-              icon={full ? 'lock-closed' : 'rocket'}
+              icon={full ? "lock-closed" : "rocket"}
               label={
                 saving
-                  ? 'Création du plan…'
+                  ? "Création du plan…"
                   : full
                     ? `Maximum ${MAX_ACTIVE_PLANS} objectifs en parallèle`
-                    : assessment && ['tres_ambitieux', 'peu_probable'].includes(assessment.feasibility)
-                      ? 'Relever le défi quand même'
-                      : 'Créer mon plan'
+                    : assessment &&
+                        ["tres_ambitieux", "peu_probable"].includes(
+                          assessment.feasibility,
+                        )
+                      ? "Relever le défi quand même"
+                      : "Créer mon plan"
               }
               onPress={submit}
               disabled={!request || !daysOk || saving || full}
             />
           ) : (
-            <Button label={step === 0 && !weight && !height ? 'Passer' : 'Continuer'} onPress={next} disabled={step === 2 && !preset} />
+            <Button
+              label={step === 0 && !weight && !height ? "Passer" : "Continuer"}
+              onPress={next}
+              disabled={step === 2 && !preset}
+            />
           )}
         </View>
       </View>
@@ -806,7 +1415,7 @@ function Recap(p: {
   goTo: (step: number) => void;
   levelText: string;
   athleteText: string;
-  onLever: (kind: 'sessions' | 'weeks') => void;
+  onLever: (kind: "sessions" | "weeks") => void;
   canAddWeeks: boolean;
   request: PlanRequest | null;
   athlete: Athlete;
@@ -817,28 +1426,64 @@ function Recap(p: {
   const a = p.assessment;
   const tone = feasibilityTone(a?.feasibility, t);
 
-  const levers: Array<{ kind: 'sessions' | 'weeks'; label: string; c: number }> = [];
+  const levers: Array<{
+    kind: "sessions" | "weeks";
+    label: string;
+    c: number;
+  }> = [];
   if (p.request && a) {
     if (p.sessions < 5) {
-      const c = assessGoal(p.request.goal, p.request.level, p.start, { sessionsPerWeek: (p.sessions + 1) as SessionsPerWeek, athlete: p.athlete }).confidence;
-      if (c >= a.confidence + 3) levers.push({ kind: 'sessions', label: `${p.sessions + 1} séances / sem.`, c });
+      const c = assessGoal(p.request.goal, p.request.level, p.start, {
+        sessionsPerWeek: (p.sessions + 1) as SessionsPerWeek,
+        athlete: p.athlete,
+      }).confidence;
+      if (c >= a.confidence + 3)
+        levers.push({
+          kind: "sessions",
+          label: `${p.sessions + 1} séances / sem.`,
+          c,
+        });
     }
     if (p.canAddWeeks) {
-      const c = assessGoal({ ...p.request.goal, eventDate: addDays(p.eventDate, 28) }, p.request.level, p.start, { sessionsPerWeek: p.sessions, athlete: p.athlete }).confidence;
-      if (c >= a.confidence + 3) levers.push({ kind: 'weeks', label: '4 semaines de plus', c });
+      const c = assessGoal(
+        { ...p.request.goal, eventDate: addDays(p.eventDate, 28) },
+        p.request.level,
+        p.start,
+        { sessionsPerWeek: p.sessions, athlete: p.athlete },
+      ).confidence;
+      if (c >= a.confidence + 3)
+        levers.push({ kind: "weeks", label: "4 semaines de plus", c });
     }
   }
 
   return (
     <>
-      <PhotoCard image={p.km >= 40 ? 'cityRace' : p.km >= 20 ? 'marathon' : p.mode === 'chrono' ? 'trackSunset' : 'road'} height={300} contentStyle={styles.heroContent}>
+      <PhotoCard
+        image={
+          p.km >= 40
+            ? "cityRace"
+            : p.km >= 20
+              ? "marathon"
+              : p.mode === "chrono"
+                ? "trackSunset"
+                : "road"
+        }
+        height={300}
+        contentStyle={styles.heroContent}
+      >
         <View style={styles.heroTop}>
           <View style={styles.glassChip}>
             <Txt style={styles.glassChipText} color="#fff" numberOfLines={1}>
-              {p.race?.name ?? `Objectif ${Math.min(p.plansCount + 1, MAX_ACTIVE_PLANS)}/${MAX_ACTIVE_PLANS}`}
+              {p.race?.name ??
+                `Objectif ${Math.min(p.plansCount + 1, MAX_ACTIVE_PLANS)}/${MAX_ACTIVE_PLANS}`}
             </Txt>
           </View>
-          <LinearGradient colors={ls.colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.levelPill}>
+          <LinearGradient
+            colors={ls.colors}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.levelPill}
+          >
             <Bars n={ls.bars} />
             <Txt style={styles.glassChipText} color="#fff">
               Niveau {p.objLevel}
@@ -847,22 +1492,36 @@ function Recap(p: {
         </View>
         <View style={{ gap: 2 }}>
           <Txt style={styles.heroKicker} color="rgba(255,255,255,0.72)">
-            {p.mode === 'chrono' ? 'Objectif chrono' : 'Objectif distance'}
+            {p.mode === "chrono" ? "Objectif chrono" : "Objectif distance"}
           </Txt>
           <Txt style={styles.heroTitle} color="#fff" numberOfLines={1}>
             {distanceLabel(p.km)}
           </Txt>
           <Txt style={styles.heroSub} color="rgba(255,255,255,0.92)">
-            {p.mode === 'chrono' && p.targetSec ? `en ${formatTime(p.targetSec)}` : 'jusqu’à la ligne d’arrivée'}
+            {p.mode === "chrono" && p.targetSec
+              ? `en ${formatTime(p.targetSec)}`
+              : "jusqu’à la ligne d’arrivée"}
           </Txt>
         </View>
         <View style={styles.heroStats}>
-          <HeroStat value={formatDateFr(p.eventDate, { day: 'numeric', month: 'short' })} label={p.race?.startTime ? clock(p.race.startTime) : DAY_NAMES[(new Date(p.eventDate + 'T12:00:00').getDay() + 6) % 7]} />
+          <HeroStat
+            value={formatDateFr(p.eventDate, {
+              day: "numeric",
+              month: "short",
+            })}
+            label={
+              p.race?.startTime
+                ? clock(p.race.startTime)
+                : DAY_NAMES[
+                    (new Date(p.eventDate + "T12:00:00").getDay() + 6) % 7
+                  ]
+            }
+          />
           <View style={styles.heroDivider} />
           <HeroStat value={`${p.weeks} sem.`} label="de prépa" />
           <View style={styles.heroDivider} />
           <HeroStat value={`${p.sessions}×`} label="par semaine" />
-          {p.mode === 'chrono' && p.targetSec ? (
+          {p.mode === "chrono" && p.targetSec ? (
             <>
               <View style={styles.heroDivider} />
               <HeroStat value={formatPace(p.targetSec / p.km)} label="min/km" />
@@ -891,14 +1550,33 @@ function Recap(p: {
               </Txt>
             </Txt>
           </View>
-          <ProgressBar value={a.confidence / 100} colors={[tone, tone]} height={6} />
+          <ProgressBar
+            value={a.confidence / 100}
+            colors={[tone, tone]}
+            height={6}
+          />
           <Txt muted>{a.message}</Txt>
           {levers.length > 0 && (
             <View style={styles.wrap}>
               {levers.map((l) => (
-                <Pressable key={l.label} accessibilityRole="button" onPress={() => p.onLever(l.kind)} style={({ pressed }) => [styles.lever, { backgroundColor: t.accentSoft, opacity: pressed ? 0.7 : 1 }]}>
+                <Pressable
+                  key={l.label}
+                  accessibilityRole="button"
+                  onPress={() => p.onLever(l.kind)}
+                  style={({ pressed }) => [
+                    styles.lever,
+                    {
+                      backgroundColor: t.accentSoft,
+                      opacity: pressed ? 0.7 : 1,
+                    },
+                  ]}
+                >
                   <Ionicons name="trending-up" size={14} color={t.accent} />
-                  <Txt variant="caption" color={t.accent} style={{ fontWeight: '600' }}>
+                  <Txt
+                    variant="caption"
+                    color={t.accent}
+                    style={{ fontWeight: "600" }}
+                  >
                     {l.label} · {l.c} %
                   </Txt>
                 </Pressable>
@@ -909,33 +1587,54 @@ function Recap(p: {
       ) : null}
 
       <Card style={{ gap: 0, paddingVertical: Spacing.xs }}>
-        <RecapRow icon="person-outline" label="Toi" value={p.athleteText} onEdit={() => p.goTo(0)} />
-        <RecapRow icon="speedometer-outline" label="Ta forme" value={p.levelText} onEdit={() => p.goTo(1)} />
+        <RecapRow
+          icon="person-outline"
+          label="Toi"
+          value={p.athleteText}
+          onEdit={() => p.goTo(0)}
+        />
+        <RecapRow
+          icon="speedometer-outline"
+          label="Ta forme"
+          value={p.levelText}
+          onEdit={() => p.goTo(1)}
+        />
         <RecapRow
           icon="flag-outline"
           label="Objectif"
-          value={p.mode === 'chrono' && p.targetSec ? `${distanceLabel(p.km)} en ${formatTime(p.targetSec)}` : `Finir : ${distanceLabel(p.km)}`}
+          value={
+            p.mode === "chrono" && p.targetSec
+              ? `${distanceLabel(p.km)} en ${formatTime(p.targetSec)}`
+              : `Finir : ${distanceLabel(p.km)}`
+          }
           onEdit={() => p.goTo(2)}
         />
         <RecapRow
           icon="calendar-outline"
           label="Course"
-          value={`${p.race?.name ? `${p.race.name} · ` : ''}${formatDateFr(p.eventDate, { weekday: 'short', day: 'numeric', month: 'short' })}`}
+          value={`${p.race?.name ? `${p.race.name} · ` : ""}${formatDateFr(p.eventDate, { weekday: "short", day: "numeric", month: "short" })}`}
           onEdit={() => p.goTo(3)}
         />
         <RecapRow
           icon="repeat-outline"
           label="Rythme"
-          value={`${p.sessions} séance${p.sessions > 1 ? 's' : ''} · ${[...p.days]
+          value={`${p.sessions} séance${p.sessions > 1 ? "s" : ""} · ${[
+            ...p.days,
+          ]
             .sort((x, y) => x - y)
             .map((d) => DAY_NAMES[d].slice(0, 3))
-            .join(', ')}`}
+            .join(", ")}`}
           onEdit={() => p.goTo(4)}
           last
         />
       </Card>
-      <Txt variant="caption" muted style={{ textAlign: 'center' }}>
-        Début du plan : {formatDateFr(p.start, { weekday: 'long', day: 'numeric', month: 'long' })}
+      <Txt variant="caption" muted style={{ textAlign: "center" }}>
+        Début du plan :{" "}
+        {formatDateFr(p.start, {
+          weekday: "long",
+          day: "numeric",
+          month: "long",
+        })}
       </Txt>
     </>
   );
@@ -947,13 +1646,14 @@ type Theme = ReturnType<typeof useTheme>;
 
 function feasibilityTone(f: Feasibility | undefined, t: Theme): string {
   if (!f) return t.line;
-  if (f === 'facile' || f === 'tres_probable' || f === 'realiste') return t.ok;
-  if (f === 'exigeant') return t.warn;
-  if (f === 'tres_ambitieux') return t.flame;
+  if (f === "facile" || f === "tres_probable" || f === "realiste") return t.ok;
+  if (f === "exigeant") return t.warn;
+  if (f === "tres_ambitieux") return t.flame;
   return t.bad;
 }
 
-const confColor = (c: number, t: Theme) => (c >= 70 ? t.ok : c >= 45 ? t.warn : c >= 25 ? t.flame : t.bad);
+const confColor = (c: number, t: Theme) =>
+  c >= 70 ? t.ok : c >= 45 ? t.warn : c >= 25 ? t.flame : t.bad;
 
 // ---------- Composants ----------
 
@@ -968,10 +1668,29 @@ function Heading({ title, sub }: { title: string; sub: string }) {
 
 function Card({ children, style }: { children: ReactNode; style?: object }) {
   const t = useTheme();
-  return <View style={[styles.card, styles.shadow, { backgroundColor: t.surface }, style]}>{children}</View>;
+  return (
+    <View
+      style={[
+        styles.card,
+        styles.shadow,
+        { backgroundColor: t.surface },
+        style,
+      ]}
+    >
+      {children}
+    </View>
+  );
 }
 
-function Notice({ text, fix, onFix }: { text: string; fix?: number | null; onFix?: (v: number) => void }) {
+function Notice({
+  text,
+  fix,
+  onFix,
+}: {
+  text: string;
+  fix?: number | null;
+  onFix?: (v: number) => void;
+}) {
   const t = useTheme();
   return (
     <View style={[styles.notice, { backgroundColor: t.flameSoft }]}>
@@ -980,8 +1699,12 @@ function Notice({ text, fix, onFix }: { text: string; fix?: number | null; onFix
         {text}
       </Txt>
       {fix && onFix ? (
-        <Pressable accessibilityRole="button" onPress={() => onFix(fix)} hitSlop={8}>
-          <Txt variant="caption" color={t.accent} style={{ fontWeight: '700' }}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => onFix(fix)}
+          hitSlop={8}
+        >
+          <Txt variant="caption" color={t.accent} style={{ fontWeight: "700" }}>
             Viser {formatTime(fix)}
           </Txt>
         </Pressable>
@@ -995,7 +1718,11 @@ function ConfBadge({ c, small }: { c: number; small?: boolean }) {
   return (
     <View style={styles.confRow}>
       <View style={[styles.confDot, { backgroundColor: confColor(c, t) }]} />
-      <Txt variant="caption" muted style={small ? undefined : { fontWeight: '600' }}>
+      <Txt
+        variant="caption"
+        muted
+        style={small ? undefined : { fontWeight: "600" }}
+      >
         {c} %
       </Txt>
     </View>
@@ -1006,7 +1733,13 @@ function Bars({ n }: { n: number }) {
   return (
     <View style={styles.bars}>
       {[1, 2, 3].map((b) => (
-        <View key={b} style={[styles.bar, { height: 4 + b * 3, opacity: b <= n ? 1 : 0.35 }]} />
+        <View
+          key={b}
+          style={[
+            styles.bar,
+            { height: 4 + b * 3, opacity: b <= n ? 1 : 0.35 },
+          ]}
+        />
       ))}
     </View>
   );
@@ -1015,15 +1748,30 @@ function Bars({ n }: { n: number }) {
 function LevelBars({ level }: { level: ObjectiveLevel }) {
   const t = useTheme();
   const n = LEVEL_STYLE[level].bars;
-  const c = level === 'débutant' ? t.ok : level === 'intermédiaire' ? t.accent : t.flame;
+  const c =
+    level === "débutant"
+      ? t.ok
+      : level === "intermédiaire"
+        ? t.accent
+        : t.flame;
   return (
     <View style={styles.confRow}>
       <View style={styles.bars}>
         {[1, 2, 3].map((b) => (
-          <View key={b} style={[styles.bar, { height: 4 + b * 3, backgroundColor: c, opacity: b <= n ? 1 : 0.25 }]} />
+          <View
+            key={b}
+            style={[
+              styles.bar,
+              {
+                height: 4 + b * 3,
+                backgroundColor: c,
+                opacity: b <= n ? 1 : 0.25,
+              },
+            ]}
+          />
         ))}
       </View>
-      <Txt variant="caption" color={c} style={{ fontWeight: '600' }}>
+      <Txt variant="caption" color={c} style={{ fontWeight: "600" }}>
         {level}
       </Txt>
     </View>
@@ -1036,31 +1784,54 @@ function HeroStat({ value, label }: { value: string; label: string }) {
       <Txt style={styles.heroStatValue} color="#fff" numberOfLines={1}>
         {value}
       </Txt>
-      <Txt style={styles.heroStatLabel} color="rgba(255,255,255,0.7)" numberOfLines={1}>
+      <Txt
+        style={styles.heroStatLabel}
+        color="rgba(255,255,255,0.7)"
+        numberOfLines={1}
+      >
         {label}
       </Txt>
     </View>
   );
 }
 
-function RecapRow({ icon, label, value, onEdit, last }: { icon: IconName; label: string; value: string; onEdit: () => void; last?: boolean }) {
+function RecapRow({
+  icon,
+  label,
+  value,
+  onEdit,
+  last,
+}: {
+  icon: IconName;
+  label: string;
+  value: string;
+  onEdit: () => void;
+  last?: boolean;
+}) {
   const t = useTheme();
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`Modifier : ${label}`}
       onPress={onEdit}
-      style={[styles.recapRow, !last && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.line }]}>
+      style={[
+        styles.recapRow,
+        !last && {
+          borderBottomWidth: StyleSheet.hairlineWidth,
+          borderBottomColor: t.line,
+        },
+      ]}
+    >
       <Ionicons name={icon} size={18} color={t.textSecondary} />
       <View style={{ flex: 1 }}>
         <Txt variant="caption" muted>
           {label}
         </Txt>
-        <Txt style={{ fontWeight: '600' }} numberOfLines={2}>
+        <Txt style={{ fontWeight: "600" }} numberOfLines={2}>
           {value}
         </Txt>
       </View>
-      <Txt variant="caption" color={t.accent} style={{ fontWeight: '600' }}>
+      <Txt variant="caption" color={t.accent} style={{ fontWeight: "600" }}>
         Modifier
       </Txt>
     </Pressable>
@@ -1068,10 +1839,26 @@ function RecapRow({ icon, label, value, onEdit, last }: { icon: IconName; label:
 }
 
 /** Contrôle segmenté façon iOS : la sélection est une pastille claire qui « flotte » sur la piste. */
-function Segment({ options, value, onChange }: { options: Array<{ value: string; label: string; icon?: IconName; a11y?: string }>; value: string; onChange: (v: string) => void }) {
+function Segment({
+  options,
+  value,
+  onChange,
+}: {
+  options: Array<{
+    value: string;
+    label: string;
+    icon?: IconName;
+    a11y?: string;
+  }>;
+  value: string;
+  onChange: (v: string) => void;
+}) {
   const t = useTheme();
   return (
-    <View style={[styles.segTrack, { backgroundColor: t.surfaceAlt }]} accessibilityRole="radiogroup">
+    <View
+      style={[styles.segTrack, { backgroundColor: t.surfaceAlt }]}
+      accessibilityRole="radiogroup"
+    >
       {options.map((o) => {
         const active = o.value === value;
         return (
@@ -1085,9 +1872,23 @@ function Segment({ options, value, onChange }: { options: Array<{ value: string;
               Haptics.selectionAsync().catch(() => {});
               onChange(o.value);
             }}
-            style={[styles.segBtn, active && [styles.segActive, { backgroundColor: t.surface }]]}>
-            {o.icon ? <Ionicons name={o.icon} size={16} color={active ? t.accent : t.textSecondary} /> : null}
-            <Txt style={styles.segLabel} color={active ? t.text : t.textSecondary} numberOfLines={1}>
+            style={[
+              styles.segBtn,
+              active && [styles.segActive, { backgroundColor: t.surface }],
+            ]}
+          >
+            {o.icon ? (
+              <Ionicons
+                name={o.icon}
+                size={16}
+                color={active ? t.accent : t.textSecondary}
+              />
+            ) : null}
+            <Txt
+              style={styles.segLabel}
+              color={active ? t.text : t.textSecondary}
+              numberOfLines={1}
+            >
               {o.label}
             </Txt>
           </Pressable>
@@ -1097,7 +1898,15 @@ function Segment({ options, value, onChange }: { options: Array<{ value: string;
   );
 }
 
-function Pill({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+function Pill({
+  label,
+  active,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
   const t = useTheme();
   return (
     <Pressable
@@ -1107,7 +1916,14 @@ function Pill({ label, active, onPress }: { label: string; active: boolean; onPr
         Haptics.selectionAsync().catch(() => {});
         onPress();
       }}
-      style={({ pressed }) => [styles.pill, { backgroundColor: active ? t.accent : t.surfaceAlt, opacity: pressed ? 0.8 : 1 }]}>
+      style={({ pressed }) => [
+        styles.pill,
+        {
+          backgroundColor: active ? t.accent : t.surfaceAlt,
+          opacity: pressed ? 0.8 : 1,
+        },
+      ]}
+    >
       <Txt style={styles.pillLabel} color={active ? t.accentText : t.text}>
         {label}
       </Txt>
@@ -1115,7 +1931,13 @@ function Pill({ label, active, onPress }: { label: string; active: boolean; onPr
   );
 }
 
-function DayPicker({ selected, onToggle }: { selected: number[]; onToggle: (d: number) => void }) {
+function DayPicker({
+  selected,
+  onToggle,
+}: {
+  selected: number[];
+  onToggle: (d: number) => void;
+}) {
   const t = useTheme();
   return (
     <View style={styles.days}>
@@ -1131,8 +1953,15 @@ function DayPicker({ selected, onToggle }: { selected: number[]; onToggle: (d: n
               Haptics.selectionAsync().catch(() => {});
               onToggle(i);
             }}
-            style={[styles.day, { backgroundColor: on ? t.accent : t.surfaceAlt }]}>
-            <Txt style={styles.dayLabel} color={on ? t.accentText : t.textSecondary}>
+            style={[
+              styles.day,
+              { backgroundColor: on ? t.accent : t.surfaceAlt },
+            ]}
+          >
+            <Txt
+              style={styles.dayLabel}
+              color={on ? t.accentText : t.textSecondary}
+            >
               {d}
             </Txt>
           </Pressable>
@@ -1142,7 +1971,17 @@ function DayPicker({ selected, onToggle }: { selected: number[]; onToggle: (d: n
   );
 }
 
-function RoundBtn({ icon, label, onPress, disabled }: { icon: 'add' | 'remove'; label: string; onPress: () => void; disabled?: boolean }) {
+function RoundBtn({
+  icon,
+  label,
+  onPress,
+  disabled,
+}: {
+  icon: "add" | "remove";
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+}) {
   const t = useTheme();
   return (
     <Pressable
@@ -1154,16 +1993,46 @@ function RoundBtn({ icon, label, onPress, disabled }: { icon: 'add' | 'remove'; 
         Haptics.selectionAsync().catch(() => {});
         onPress();
       }}
-      style={({ pressed }) => [styles.round, styles.shadow, { backgroundColor: t.surface, opacity: disabled ? 0.35 : pressed ? 0.7 : 1 }]}>
+      style={({ pressed }) => [
+        styles.round,
+        styles.shadow,
+        {
+          backgroundColor: t.surface,
+          opacity: disabled ? 0.35 : pressed ? 0.7 : 1,
+        },
+      ]}
+    >
       <Ionicons name={icon} size={20} color={t.accent} />
     </Pressable>
   );
 }
 
-function TimeBox({ label, value, onChange, placeholder, hint, error }: { label: string; value: string; onChange: (v: string) => void; placeholder: string; hint: string; error?: boolean }) {
+function TimeBox({
+  label,
+  value,
+  onChange,
+  placeholder,
+  hint,
+  error,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  hint: string;
+  error?: boolean;
+}) {
   const t = useTheme();
   return (
-    <View style={[styles.timeBox, { backgroundColor: t.surfaceAlt, borderColor: error ? t.bad : 'transparent' }]}>
+    <View
+      style={[
+        styles.timeBox,
+        {
+          backgroundColor: t.surfaceAlt,
+          borderColor: error ? t.bad : "transparent",
+        },
+      ]}
+    >
       <Txt variant="caption" muted>
         {label}
       </Txt>
@@ -1200,14 +2069,24 @@ function Field({
   unit?: string;
   value: string;
   onChange: (v: string) => void;
-  keyboardType: 'decimal-pad' | 'number-pad' | 'numbers-and-punctuation' | 'default';
+  keyboardType:
+    | "decimal-pad"
+    | "number-pad"
+    | "numbers-and-punctuation"
+    | "default";
   placeholder?: string;
   flex?: boolean;
   big?: boolean;
 }) {
   const t = useTheme();
   return (
-    <View style={[styles.field, { backgroundColor: t.surfaceAlt }, flex && { flex: 1 }]}>
+    <View
+      style={[
+        styles.field,
+        { backgroundColor: t.surfaceAlt },
+        flex && { flex: 1 },
+      ]}
+    >
       <Txt variant="caption" muted>
         {label}
       </Txt>
@@ -1220,7 +2099,7 @@ function Field({
           placeholderTextColor={t.textSecondary}
           keyboardType={keyboardType}
           returnKeyType="done"
-          maxLength={keyboardType === 'default' ? 80 : 8}
+          maxLength={keyboardType === "default" ? 80 : 8}
           style={[styles.fieldInput, big && styles.fieldBig, { color: t.text }]}
         />
         {unit ? (
@@ -1235,80 +2114,304 @@ function Field({
 
 const styles = StyleSheet.create({
   page: { padding: Spacing.l, gap: Spacing.l, paddingBottom: Spacing.xxl },
-  row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.s },
-  rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.s },
-  wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.s },
+  row: { flexDirection: "row", alignItems: "center", gap: Spacing.s },
+  rowBetween: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: Spacing.s,
+  },
+  wrap: { flexDirection: "row", flexWrap: "wrap", gap: Spacing.s },
   card: { borderRadius: 22, padding: Spacing.l, gap: Spacing.m },
-  shadow: { boxShadow: '0 1px 2px rgba(11,16,32,0.04), 0 6px 20px rgba(11,16,32,0.06)' },
-  h1: { fontSize: 26, lineHeight: 32, fontWeight: '700', letterSpacing: -0.6 },
+  shadow: {
+    boxShadow: "0 1px 2px rgba(11,16,32,0.04), 0 6px 20px rgba(11,16,32,0.06)",
+  },
+  h1: { fontSize: 26, lineHeight: 32, fontWeight: "700", letterSpacing: -0.6 },
 
   progressWrap: { paddingHorizontal: Spacing.l, paddingTop: Spacing.m, gap: 6 },
-  progress: { flexDirection: 'row', gap: 4 },
+  progress: { flexDirection: "row", gap: 4 },
   seg: { flex: 1, height: 4, borderRadius: 2 },
 
-  bar: { width: 3, borderRadius: 2, backgroundColor: '#fff' },
-  bars: { flexDirection: 'row', alignItems: 'flex-end', gap: 2 },
-  heroContent: { flex: 1, justifyContent: 'flex-end', gap: Spacing.m },
-  heroTop: { position: 'absolute', top: Spacing.l, left: Spacing.l, right: Spacing.l, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: Spacing.s },
-  glassChip: { backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6, flexShrink: 1 },
-  glassChipText: { fontSize: 12, fontWeight: '600', letterSpacing: 0.2 },
-  levelPill: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
-  heroKicker: { fontSize: 12, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase' },
-  heroTitle: { fontSize: 44, lineHeight: 50, fontWeight: '800', letterSpacing: -1.2 },
-  heroSub: { fontSize: 24, lineHeight: 30, fontWeight: '600', letterSpacing: -0.4, fontVariant: ['tabular-nums'] },
-  heroStats: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: Radius.m, paddingVertical: 10, paddingHorizontal: 6 },
-  heroStat: { flex: 1, alignItems: 'center', minWidth: 0 },
-  heroStatValue: { fontSize: 15, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  bar: { width: 3, borderRadius: 2, backgroundColor: "#fff" },
+  bars: { flexDirection: "row", alignItems: "flex-end", gap: 2 },
+  heroContent: { flex: 1, justifyContent: "flex-end", gap: Spacing.m },
+  heroTop: {
+    position: "absolute",
+    top: Spacing.l,
+    left: Spacing.l,
+    right: Spacing.l,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: Spacing.s,
+  },
+  glassChip: {
+    backgroundColor: "rgba(255,255,255,0.18)",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    flexShrink: 1,
+  },
+  glassChipText: { fontSize: 12, fontWeight: "600", letterSpacing: 0.2 },
+  levelPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  heroKicker: {
+    fontSize: 12,
+    fontWeight: "600",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+  heroTitle: {
+    fontSize: 44,
+    lineHeight: 50,
+    fontWeight: "800",
+    letterSpacing: -1.2,
+  },
+  heroSub: {
+    fontSize: 24,
+    lineHeight: 30,
+    fontWeight: "600",
+    letterSpacing: -0.4,
+    fontVariant: ["tabular-nums"],
+  },
+  heroStats: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.14)",
+    borderRadius: Radius.m,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+  },
+  heroStat: { flex: 1, alignItems: "center", minWidth: 0 },
+  heroStatValue: {
+    fontSize: 15,
+    fontWeight: "700",
+    fontVariant: ["tabular-nums"],
+  },
   heroStatLabel: { fontSize: 11 },
-  heroDivider: { width: StyleSheet.hairlineWidth, alignSelf: 'stretch', backgroundColor: 'rgba(255,255,255,0.3)' },
+  heroDivider: {
+    width: StyleSheet.hairlineWidth,
+    alignSelf: "stretch",
+    backgroundColor: "rgba(255,255,255,0.3)",
+  },
 
-  segTrack: { flexDirection: 'row', borderRadius: 14, padding: 3, gap: 2 },
-  segBtn: { flex: 1, minHeight: 38, borderRadius: 11, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 6 },
-  segActive: { boxShadow: '0 1px 3px rgba(11,16,32,0.12)' },
-  segLabel: { fontSize: 14, fontWeight: '600' },
-  pill: { borderRadius: 999, paddingHorizontal: 16, minHeight: 36, justifyContent: 'center' },
-  pillLabel: { fontSize: 14, fontWeight: '600' },
+  segTrack: { flexDirection: "row", borderRadius: 14, padding: 3, gap: 2 },
+  segBtn: {
+    flex: 1,
+    minHeight: 38,
+    borderRadius: 11,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingHorizontal: 6,
+  },
+  segActive: { boxShadow: "0 1px 3px rgba(11,16,32,0.12)" },
+  segLabel: { fontSize: 14, fontWeight: "600" },
+  pill: {
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    minHeight: 36,
+    justifyContent: "center",
+  },
+  pillLabel: { fontSize: 14, fontWeight: "600" },
 
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.m },
-  tile: { flexBasis: '46%', flexGrow: 1, borderRadius: 18, borderWidth: 1.5, padding: Spacing.m, gap: 2 },
-  preset: { flexBasis: '46%', flexGrow: 1, borderRadius: 18, borderWidth: 1.5, padding: Spacing.m, gap: 2, minHeight: 104 },
-  presetTitle: { fontSize: 22, fontWeight: '700', letterSpacing: -0.5, marginTop: Spacing.s },
-  option: { flexDirection: 'row', alignItems: 'center', gap: Spacing.m, borderRadius: 16, borderWidth: 1.5, padding: Spacing.m },
-  infoRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.s, borderRadius: 12, padding: Spacing.m },
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: Spacing.m },
+  tile: {
+    flexBasis: "46%",
+    flexGrow: 1,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    padding: Spacing.m,
+    gap: 2,
+  },
+  preset: {
+    flexBasis: "46%",
+    flexGrow: 1,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    padding: Spacing.m,
+    gap: 2,
+    minHeight: 104,
+  },
+  presetTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    letterSpacing: -0.5,
+    marginTop: Spacing.s,
+  },
+  option: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.m,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    padding: Spacing.m,
+  },
+  infoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.s,
+    borderRadius: 12,
+    padding: Spacing.m,
+  },
 
-  timeBox: { borderRadius: 16, borderWidth: 1, paddingVertical: Spacing.m, paddingHorizontal: Spacing.l, alignItems: 'center', gap: 2 },
-  timeInput: { fontSize: 40, fontWeight: '700', letterSpacing: -1, textAlign: 'center', minWidth: 180, paddingVertical: 2, fontVariant: ['tabular-nums'] },
-  suggestRow: { flexDirection: 'row', gap: Spacing.s },
-  suggest: { flex: 1, borderRadius: 14, borderWidth: 1, paddingVertical: Spacing.m, alignItems: 'center', gap: 2 },
-  suggestTime: { fontSize: 17, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  confRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  timeBox: {
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingVertical: Spacing.m,
+    paddingHorizontal: Spacing.l,
+    alignItems: "center",
+    gap: 2,
+  },
+  timeInput: {
+    fontSize: 40,
+    fontWeight: "700",
+    letterSpacing: -1,
+    textAlign: "center",
+    minWidth: 180,
+    paddingVertical: 2,
+    fontVariant: ["tabular-nums"],
+  },
+  suggestRow: { flexDirection: "row", gap: Spacing.s },
+  suggest: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingVertical: Spacing.m,
+    alignItems: "center",
+    gap: 2,
+  },
+  suggestTime: {
+    fontSize: 17,
+    fontWeight: "700",
+    fontVariant: ["tabular-nums"],
+  },
+  confRow: { flexDirection: "row", alignItems: "center", gap: 5 },
   confDot: { width: 7, height: 7, borderRadius: 4 },
-  notice: { flexDirection: 'row', alignItems: 'center', gap: Spacing.s, borderRadius: 12, padding: Spacing.m },
+  notice: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.s,
+    borderRadius: 12,
+    padding: Spacing.m,
+  },
 
-  search: { flexDirection: 'row', alignItems: 'center', gap: Spacing.s, borderRadius: 14, paddingHorizontal: Spacing.m, minHeight: 48 },
+  search: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.s,
+    borderRadius: 14,
+    paddingHorizontal: Spacing.m,
+    minHeight: 48,
+  },
   searchInput: { flex: 1, fontSize: 16, paddingVertical: 10 },
-  raceRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.m, borderRadius: 18, borderWidth: 1.5, padding: Spacing.m },
-  dateBadge: { width: 52, height: 56, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  dateDay: { fontSize: 20, fontWeight: '700', lineHeight: 24 },
+  raceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.m,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    padding: Spacing.m,
+  },
+  dateBadge: {
+    width: 52,
+    height: 56,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dateDay: { fontSize: 20, fontWeight: "700", lineHeight: 24 },
 
-  field: { borderRadius: 12, paddingHorizontal: Spacing.m, paddingVertical: Spacing.s },
-  fieldInput: { flex: 1, minWidth: 0, fontSize: 17, fontWeight: '600', paddingVertical: 4, fontVariant: ['tabular-nums'] },
-  fieldBig: { fontSize: 28, fontWeight: '700', paddingVertical: 6 },
+  field: {
+    borderRadius: 12,
+    paddingHorizontal: Spacing.m,
+    paddingVertical: Spacing.s,
+  },
+  fieldInput: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 17,
+    fontWeight: "600",
+    paddingVertical: 4,
+    fontVariant: ["tabular-nums"],
+  },
+  fieldBig: { fontSize: 28, fontWeight: "700", paddingVertical: 6 },
 
-  stepper: { flexDirection: 'row', alignItems: 'center', borderRadius: 16, padding: Spacing.s },
-  stepValue: { fontSize: 32, lineHeight: 38, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  round: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  days: { flexDirection: 'row', justifyContent: 'space-between', gap: 6 },
-  day: { flex: 1, maxWidth: 42, aspectRatio: 1, borderRadius: 999, alignItems: 'center', justifyContent: 'center' },
-  dayLabel: { fontSize: 13, fontWeight: '600' },
+  stepper: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 16,
+    padding: Spacing.s,
+  },
+  stepValue: {
+    fontSize: 32,
+    lineHeight: 38,
+    fontWeight: "700",
+    fontVariant: ["tabular-nums"],
+  },
+  round: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  days: { flexDirection: "row", justifyContent: "space-between", gap: 6 },
+  day: {
+    flex: 1,
+    maxWidth: 42,
+    aspectRatio: 1,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dayLabel: { fontSize: 13, fontWeight: "600" },
   miniConf: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
 
-  verdictTitle: { fontSize: 19, fontWeight: '700', letterSpacing: -0.3 },
-  verdictPct: { fontSize: 38, lineHeight: 42, fontWeight: '700', letterSpacing: -1, fontVariant: ['tabular-nums'] },
-  verdictPctUnit: { fontSize: 20, fontWeight: '600' },
-  lever: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
-  recapRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.m, paddingVertical: Spacing.m },
+  verdictTitle: { fontSize: 19, fontWeight: "700", letterSpacing: -0.3 },
+  verdictPct: {
+    fontSize: 38,
+    lineHeight: 42,
+    fontWeight: "700",
+    letterSpacing: -1,
+    fontVariant: ["tabular-nums"],
+  },
+  verdictPctUnit: { fontSize: 20, fontWeight: "600" },
+  lever: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  recapRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.m,
+    paddingVertical: Spacing.m,
+  },
 
-  actionBar: { flexDirection: 'row', alignItems: 'center', gap: Spacing.s, paddingHorizontal: Spacing.l, paddingTop: Spacing.m, borderTopWidth: StyleSheet.hairlineWidth },
-  back: { width: 52, height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  actionBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.s,
+    paddingHorizontal: Spacing.l,
+    paddingTop: Spacing.m,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  back: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 });

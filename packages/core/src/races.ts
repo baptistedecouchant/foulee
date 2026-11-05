@@ -22,6 +22,11 @@ export const RACE_CALENDAR: RaceEvent[] = [
   { id: 'tour-eiffel-10k-2026', name: '10 km de la Tour Eiffel', city: 'Paris', date: '2026-12-06', distances: [10], confirmed: false },
   { id: 'champs-elysees-10k-2027', name: '10 km des Champs-Élysées', city: 'Paris', date: '2027-02-07', distances: [10], confirmed: false },
   { id: 'saint-valentin-2027', name: 'Course de la Saint-Valentin', city: 'Paris', date: '2027-02-13', distances: [5, 10], confirmed: false },
+  { id: 'marathon-bordeaux-2026', name: 'Marathon de Bordeaux Métropole', city: 'Bordeaux', date: '2026-11-08', distances: [42.195], confirmed: false },
+  { id: 'marathon-paris-2027', name: 'Marathon de Paris', city: 'Paris', date: '2027-04-04', distances: [42.195], confirmed: false },
+  { id: 'marathon-nantes-2027', name: 'Marathon de Nantes', city: 'Nantes', date: '2027-04-25', distances: [42.195], confirmed: false },
+  { id: 'run-in-lyon-2027', name: 'Run in Lyon', city: 'Lyon', date: '2027-10-03', distances: [10, 21.0975, 42.195], confirmed: false },
+  { id: 'marathon-metz-2027', name: 'Marathon Metz Mirabelle', city: 'Metz', date: '2027-10-10', distances: [42.195], confirmed: false },
   { id: 'semi-paris-2027', name: 'Semi-marathon de Paris', city: 'Paris', date: '2027-03-07', distances: [21.0975], confirmed: false },
 ];
 

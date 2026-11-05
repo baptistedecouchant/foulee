@@ -1,7 +1,8 @@
-import { useState } from 'react';
-import { ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { ScrollView, StyleSheet, Switch, View, type ScrollViewInstance } from 'react-native';
 
 import { Button, Card, Chip, Ionicons, Row, Txt } from '@/components/ui';
+import { AvatarEditor } from '@/components/avatar-editor';
 import { GradientCard } from '@/components/visuals';
 import { Gradients, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -19,11 +20,16 @@ export default function AccountScreen() {
   const t = useTheme();
   const { profile, reload } = useSession();
   const [confirm, setConfirm] = useState(false);
+  // La confirmation s'ouvre en bas de l'écran : on fait défiler pour qu'elle soit entièrement visible.
+  const scrollRef = useRef<ScrollViewInstance>(null);
+  useEffect(() => {
+    if (confirm) setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 60);
+  }, [confirm]);
   const [share, setShare] = useState<boolean | null>(null);
 
   if (isDemo || !profile) {
     return (
-      <ScrollView style={{ backgroundColor: t.background }} contentContainerStyle={styles.page}>
+      <ScrollView ref={scrollRef} style={{ backgroundColor: t.background }} contentContainerStyle={styles.page}>
         <Card>
           <Txt variant="title">Mode démo</Txt>
           <Txt muted>Les comptes sont disponibles quand l’app est reliée au serveur.</Txt>
@@ -34,14 +40,10 @@ export default function AccountScreen() {
 
   const [y, m, d] = (profile.birthDate ?? '').split('-');
   return (
-    <ScrollView style={{ backgroundColor: t.background }} contentContainerStyle={styles.page}>
+    <ScrollView ref={scrollRef} style={{ backgroundColor: t.background }} contentContainerStyle={styles.page}>
       <GradientCard colors={Gradients.night}>
         <Row>
-          <View style={[styles.avatar, { backgroundColor: t.accent }]}>
-            <Txt variant="display" color="#fff">
-              {(profile.firstName ?? '?').slice(0, 1).toUpperCase()}
-            </Txt>
-          </View>
+          <AvatarEditor name={profile.firstName ?? 'Moi'} size={60} />
           <View style={{ flex: 1 }}>
             <Txt variant="title" color="#fff">
               {profile.firstName} {profile.lastName}
@@ -121,6 +123,6 @@ export default function AccountScreen() {
 }
 
 const styles = StyleSheet.create({
-  page: { padding: Spacing.l, gap: Spacing.l, paddingBottom: 60 },
+  page: { padding: Spacing.l, gap: Spacing.l, paddingBottom: 110 },
   avatar: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
 });

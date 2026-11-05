@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import { StyleSheet, Text, View } from 'react-native';
 import { CHALLENGES, daysBetween, unitOf, type FriendGoal, type HubChallenge } from '@foulee/core';
 
@@ -5,10 +6,16 @@ import { Button, Card, Chip, Ionicons, ProgressBar, Row, Txt } from '@/component
 import { Gradients, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
-export function Avatar({ name, color, size = 44 }: { name: string; color: string; size?: number }) {
+/** Avatar : la photo de profil si elle existe, sinon une silhouette classique. */
+export function Avatar({ name, color, size = 44, uri }: { name: string; color?: string; size?: number; uri?: string | null }) {
+  const t = useTheme();
+  const box = { width: size, height: size, borderRadius: size / 2 };
+  if (uri) {
+    return <Image source={{ uri }} style={[styles.avatar, box, { backgroundColor: t.surfaceAlt }]} contentFit="cover" transition={150} accessibilityLabel={`Photo de ${name}`} />;
+  }
   return (
-    <View style={[styles.avatar, { width: size, height: size, borderRadius: size / 2, backgroundColor: color }]}>
-      <Text style={{ color: '#fff', fontWeight: '900', fontSize: size * 0.42 }}>{(name || '?').slice(0, 1).toUpperCase()}</Text>
+    <View style={[styles.avatar, box, { backgroundColor: color ? `${color}22` : t.surfaceAlt, overflow: 'hidden' }]} accessibilityLabel={name}>
+      <Ionicons name="person" size={size * 0.62} color={color ?? t.textSecondary} style={{ marginTop: size * 0.18 }} />
     </View>
   );
 }

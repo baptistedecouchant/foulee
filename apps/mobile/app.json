@@ -73,6 +73,13 @@
           "iosAppId": "ca-app-pub-3940256099942544~1458002511",
           "userTrackingUsageDescription": "Permet d’afficher des publicités plus pertinentes. Tu peux refuser, les récompenses restent les mêmes."
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Foulée utilise tes photos pour ta photo de profil et celles de tes chaussures.",
+          "cameraPermission": "Foulée utilise l’appareil photo pour ta photo de profil et celles de tes chaussures."
+        }
       ]
     ],
     "experiments": {

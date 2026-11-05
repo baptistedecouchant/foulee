@@ -81,8 +81,8 @@ export interface Shoe {
   /** Surnom facultatif (« mes rouges »). */
   nickname?: string;
   lifeKm: number;
-  /** Coloris choisi (identifiant de l'illustration). */
-  color?: string;
+  /** Photo de la paire, prise par le coureur. */
+  photo?: string;
   /** Kilomètres déjà faits avant l'ajout dans l'app. */
   startKm: number;
   /** Date d'ajout (AAAA-MM-JJ) : les courses à partir de ce jour peuvent lui être attribuées. */

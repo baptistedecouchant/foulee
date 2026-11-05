@@ -102,6 +102,8 @@ interface PersistedState {
   serverRuns?: RunLog[];
   /** Chaussures et attribution des courses à chaque paire. */
   gear: Gear;
+  /** Photo de profil en mode démo (adresse locale). */
+  localAvatar?: string | null;
   /** Profil sportif saisi en mode démo (en ligne : il vit dans la fiche du compte). */
   athlete?: Athlete;
   /** Solde serveur (mode connecté). */
@@ -221,6 +223,7 @@ interface Store extends PersistedState {
   setEnrichment(planId: string, e: Enrichment): void;
   setConnection(p: Provider, on: boolean): void;
   setLocalAthlete(a: Athlete): void;
+  setLocalAvatar(uri: string | null): void;
   /** Toutes les courses connues, de la plus récente à la plus ancienne. */
   runs: RunLog[];
   shoes: Array<{ shoe: Shoe; wear: ShoeWear; isDefault: boolean }>;
@@ -641,6 +644,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     },
     setEnrichment: (planId, e) => updatePlan(planId, (p) => ({ ...p, enrichment: e })),
     setLocalAthlete: (a) => setState((s) => ({ ...s, athlete: a })),
+    setLocalAvatar: (uri) => setState((s) => ({ ...s, localAvatar: uri })),
     runs,
     shoes,
     addShoe: (sh, makeDefault) => {

@@ -29,6 +29,7 @@ export interface Profile {
   heightCm: number | null;
   /** Objectifs et avancement visibles par les amis. */
   shareGoals: boolean;
+  avatarUrl: string | null;
   email: string | null;
   providers: string[];
 }
@@ -202,6 +203,7 @@ export async function loadProfile(): Promise<Profile | null> {
     weightKg: p?.weight_kg != null ? Number(p.weight_kg) : null,
     heightCm: p?.height_cm ?? null,
     shareGoals: p?.share_goals !== false,
+    avatarUrl: p?.avatar_url ?? null,
     email: u.user.email ?? null,
     providers: (u.user.identities ?? []).map((i) => i.provider),
   };

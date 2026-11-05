@@ -1,6 +1,6 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, View, type ScrollViewInstance } from 'react-native';
 import { daysBetween, ECONOMY, formatDuration, formatPace, type Phase, type PlannedSession } from '@foulee/core';
 
 import { Button, Card, Chip, Ionicons, IntensityProfile, ProgressBar, Row, Txt } from '@/components/ui';
@@ -20,6 +20,11 @@ export default function PlanScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { getPlan, removePlan, setEnrichment } = useStore();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // La confirmation s'ouvre en bas de l'écran : on fait défiler pour qu'elle soit entièrement visible.
+  const scrollRef = useRef<ScrollViewInstance>(null);
+  useEffect(() => {
+    if (confirmDelete) setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 60);
+  }, [confirmDelete]);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [enriching, setEnriching] = useState(false);
@@ -59,7 +64,7 @@ export default function PlanScreen() {
   const pr = planProgress(entry);
 
   return (
-    <ScrollView style={{ backgroundColor: t.background }} contentContainerStyle={styles.page}>
+    <ScrollView ref={scrollRef} style={{ backgroundColor: t.background }} contentContainerStyle={styles.page}>
       <Stack.Screen options={{ title: goalTitle(plan) }} />
 
       <PhotoCard image={entry.image} height={300}>
@@ -269,7 +274,7 @@ function SessionRow({ entry, session }: { entry: PlanEntry; session: PlannedSess
 }
 
 const styles = StyleSheet.create({
-  page: { padding: Spacing.l, gap: Spacing.l, paddingBottom: 60 },
+  page: { padding: Spacing.l, gap: Spacing.l, paddingBottom: 110 },
   chart: { flexDirection: 'row', alignItems: 'flex-end', gap: 4, height: 56 },
   session: { flexDirection: 'row', gap: Spacing.m, padding: Spacing.m, borderRadius: Radius.m },
   icon: { width: 46, height: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },

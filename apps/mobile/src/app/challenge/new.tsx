@@ -55,7 +55,7 @@ export default function NewChallengeScreen() {
           return (
             <Pressable key={f.id} accessibilityRole="checkbox" accessibilityState={{ checked: on }} onPress={() => toggle(f.id)}>
               <Row style={{ gap: Spacing.m }}>
-                <Avatar name={f.name} color={f.color} size={38} />
+                <Avatar name={f.name} color={f.color} size={38} uri={f.avatarUrl} />
                 <Txt style={{ flex: 1, fontWeight: '700' }}>{f.name}</Txt>
                 <Ionicons name={on ? 'checkmark-circle' : 'ellipse-outline'} size={26} color={on ? t.accent : t.textSecondary} />
               </Row>

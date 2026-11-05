@@ -5,7 +5,9 @@ import { BADGE_XP, BADGES, daysBetween, formatTime, LEVEL_TITLES, LOGIN_XP, xpFo
 
 import { Button, Card, Chip, Ionicons, LevelBadge, ProgressBar, Row, SectionTitle, Txt, type IconName } from '@/components/ui';
 import { WearBar } from '@/components/gear';
-import { ShoeArt } from '@/components/shoe-art';
+import { BrandLogo } from '@/components/brand-logo';
+import { Image } from 'expo-image';
+import { AvatarEditor } from '@/components/avatar-editor';
 import { GradientCard } from '@/components/visuals';
 import { Gradients, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -70,11 +72,7 @@ export default function ProfileScreen() {
       {/* ---------- Carte joueur ---------- */}
       <GradientCard colors={Gradients.night}>
         <Row>
-          <View style={[styles.avatar, { backgroundColor: t.accent }]}>
-            <Txt variant="display" color="#fff">
-              {name.slice(0, 1).toUpperCase()}
-            </Txt>
-          </View>
+          <AvatarEditor name={name} size={60} />
           <View style={{ flex: 1 }}>
             <Txt variant="display" color="#fff" numberOfLines={1}>
               {name}
@@ -193,7 +191,11 @@ export default function ProfileScreen() {
           {mainShoe ? (
             <>
               <Row style={{ justifyContent: 'space-between' }}>
-                <ShoeArt brand={mainShoe.shoe.brand} model={mainShoe.shoe.model} color={mainShoe.shoe.color} width={96} />
+                {mainShoe.shoe.photo ? (
+                  <Image source={{ uri: mainShoe.shoe.photo }} style={styles.shoeThumb} contentFit="cover" />
+                ) : (
+                  <BrandLogo brand={mainShoe.shoe.brand} size={52} />
+                )}
                 <View style={{ flex: 1 }}>
                   <Txt variant="caption" muted>
                     {mainShoe.isDefault ? 'Paire par défaut' : 'Paire'} · {mainShoe.shoe.brand}
@@ -386,7 +388,7 @@ function LinkRow({ icon, label, onPress, last }: { icon: IconName; label: string
 
 const styles = StyleSheet.create({
   page: { padding: Spacing.l, gap: Spacing.l, paddingBottom: 120 },
-  avatar: { width: 60, height: 60, borderRadius: 30, alignItems: 'center', justifyContent: 'center' },
+  shoeThumb: { width: 64, height: 52, borderRadius: 12 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.m },
   tile: { flexBasis: '47%', flexGrow: 1, borderWidth: 1, borderRadius: Radius.l, padding: Spacing.l, gap: 2 },
   tileIcon: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', marginBottom: Spacing.s },

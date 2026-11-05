@@ -39,7 +39,7 @@ export default function PlayerScreen() {
       <Stack.Screen options={{ title: p.name }} />
       <GradientCard colors={Gradients.night}>
         <Row style={{ gap: Spacing.m }}>
-          <Avatar name={p.name} color={p.color} size={64} />
+          <Avatar name={p.name} color={p.color} size={64} uri={p.avatarUrl} />
           <View style={{ flex: 1 }}>
             <Txt variant="display" color="#fff">
               {p.name}

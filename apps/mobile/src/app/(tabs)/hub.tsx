@@ -10,12 +10,14 @@ import { GradientCard } from '@/components/visuals';
 import { Gradients, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useTopInset } from '@/hooks/use-top-inset';
+import { useMyAvatar } from '@/lib/avatar';
 import { useSocial } from '@/lib/social';
 import { isDemo } from '@/lib/supabase';
 
 const km = (n: number) => `${String(Math.round(n * 10) / 10).replace('.', ',')} km`;
 
 export default function HubScreen() {
+  const { uri: myAvatar } = useMyAvatar();
   const t = useTheme();
   const top = useTopInset();
   const social = useSocial();
@@ -59,7 +61,7 @@ export default function HubScreen() {
       <GradientCard colors={Gradients.night}>
         {o.me.name ? (
           <Row style={{ gap: Spacing.m }}>
-            <Avatar name={o.me.name} color="#3A4BFF" size={52} />
+            <Avatar name={o.me.name ?? "Moi"} color="#3A4BFF" size={52} uri={myAvatar} />
             <View style={{ flex: 1 }}>
               <Txt variant="title" color="#fff">
                 {o.me.name}
@@ -215,7 +217,7 @@ export default function HubScreen() {
           {({ pressed }) => (
             <Card style={{ transform: [{ scale: pressed ? 0.98 : 1 }] }}>
               <Row style={{ gap: Spacing.m }}>
-                <Avatar name={p.name} color={p.color} />
+                <Avatar name={p.name} color={p.color} uri={p.avatarUrl} />
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Txt style={{ fontWeight: '800' }}>{p.name}</Txt>
                   <Txt variant="caption" muted>
@@ -258,7 +260,7 @@ export default function HubScreen() {
                 accessibilityRole="button"
                 onPress={() => router.push({ pathname: '/chat/[id]', params: { id: c.id, name: c.with?.name ?? '' } })}
                 style={[styles.conv, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.line }]}>
-                <Avatar name={c.with?.name ?? '?'} color={social.player(c.with?.id ?? '')?.color ?? t.accent} size={40} />
+                <Avatar name={c.with?.name ?? "?"} color={social.player(c.with?.id ?? "")?.color ?? t.accent} size={40} uri={social.player(c.with?.id ?? "")?.avatarUrl} />
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Txt style={{ fontWeight: c.unread ? '900' : '700' }}>{c.with?.name ?? 'Conversation'}</Txt>
                   <Txt variant="caption" muted numberOfLines={1}>
