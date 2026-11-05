@@ -102,6 +102,8 @@ export interface Plan {
   sessions: PlannedSession[];
   racePaceSecPerKm: number;
   predictedTimeSec: number;
+  /** VMA mesurée (test des 6 minutes) sur laquelle le plan a été recalé. */
+  vma?: { value: number; date: string };
 }
 
 // ---------- Activités reçues des montres / apps ----------

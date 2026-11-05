@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { BADGES, ECONOMY, formatDuration, LOGIN_XP } from '@foulee/core';
+import { BADGES, currentPace10k, ECONOMY, formatDuration, formatTime, LOGIN_XP, riegel } from '@foulee/core';
 
 import { Button, Card, Chip, Ionicons, LevelBadge, ProgressBar, Row, SectionTitle, StatPill, Txt } from '@/components/ui';
 import { GradientCard, PhotoCard } from '@/components/visuals';
@@ -10,6 +10,9 @@ import { useTopInset } from '@/hooks/use-top-inset';
 import { imageForSession } from '@/lib/images';
 import { BADGE_ICON, daysLeft, fmtInt, goalTitle, planProgress, SESSION_ICON } from '@/lib/labels';
 import { formatDateFr, MAX_ACTIVE_PLANS, todayIso, useStore } from '@/lib/store';
+
+/** 850 · 1,2k · 12k */
+const compact = (n: number) => (n < 1000 ? String(n) : `${String(Math.round(n / 100) / 10).replace('.', ',').replace(/,0$/, '')}k`);
 
 export default function HomeScreen() {
   const t = useTheme();
@@ -26,6 +29,27 @@ export default function HomeScreen() {
     .map((p) => ({ p, days: daysLeft(p.plan, today) }))
     .filter((x) => x.days >= 0 && x.days <= 7)
     .sort((a, b) => a.days - b.days)[0];
+
+  // Objectif le plus proche : avancement en séances et temps estimé.
+  const goalBar = (() => {
+    const g = plans
+      .map((p) => ({ p, days: daysLeft(p.plan, today) }))
+      .filter((x) => x.days >= 0)
+      .sort((a, b) => a.days - b.days)[0];
+    if (!g) return null;
+    const plan = g.p.plan;
+    const total = plan.sessions.length;
+    const done = plan.sessions.filter((x) => ['validee', 'partielle'].includes(g.p.validations[x.id]?.status ?? '')).length;
+    const ratio = total ? done / total : 0;
+    const goal = plan.request.goal;
+    let estimate: string | null = null;
+    if (goal.mode === 'chrono' && goal.targetTimeSec) {
+      const from = riegel(currentPace10k(plan.request.level) * 10, 10, goal.distanceKm);
+      const now = from - (from - goal.targetTimeSec) * ratio;
+      if (from > goal.targetTimeSec) estimate = formatTime(Math.round(now));
+    }
+    return { id: g.p.id, days: g.days, title: goalTitle(plan), total, done, ratio, estimate, target: goal.targetTimeSec ? formatTime(goal.targetTimeSec) : '' };
+  })();
 
   const upcomingBadges = BADGES.map((b) => ({ b, v: b.progress(stats) }))
     .filter((x) => x.v < 1)
@@ -69,7 +93,62 @@ export default function HomeScreen() {
           <StatPill icon="cash" value={`${fmtInt(balance)} RC`} color={t.goldText} bg={t.gold} />
           <StatPill icon="flash" value={`${fmtInt(level.xp)} XP`} color="#04281B" bg={t.xp} />
         </Row>
+        <Pressable accessibilityRole="button" accessibilityLabel="Pas du jour" onPress={() => health !== 'connected' && router.push('/devices')} style={styles.stepsRow}>
+          <Txt style={{ fontSize: 18 }}>👟</Txt>
+          <Txt variant="number" color="#fff">
+            {health === 'connected' ? (steps == null ? '…' : `${compact(steps)} pas`) : 'Pas du jour'}
+          </Txt>
+          {health === 'connected' && steps != null ? (
+            <View style={{ flex: 1 }}>
+              <ProgressBar value={steps / 10000} height={6} track="rgba(255,255,255,0.15)" />
+            </View>
+          ) : (
+            <Txt variant="caption" color="rgba(255,255,255,0.7)" style={{ flex: 1 }}>
+              {health === 'available' ? 'Connecte Apple Santé' : 'avec Apple Santé, dans l’app installée'}
+            </Txt>
+          )}
+        </Pressable>
       </GradientCard>
+
+      {/* ---------- Astuce du jour ---------- */}
+      <Card>
+        <Row style={{ justifyContent: 'space-between' }}>
+          <Chip tone="accent" icon="bulb" label={`💡 Astuce du jour · ${tip.category}`} />
+          {tipRead ? <Chip tone="ok" icon="checkmark" label={`+${LOGIN_XP.tip} XP`} /> : null}
+        </Row>
+        <Txt style={{ fontWeight: '800' }}>{tip.title}</Txt>
+        <Txt muted>{tip.text}</Txt>
+        {!tipRead && <Button kind="secondary" small icon="checkmark" label={`J’ai lu (+${LOGIN_XP.tip} XP)`} onPress={readTip} />}
+      </Card>
+
+      {/* ---------- Prochain objectif : barre de progression ---------- */}
+      {goalBar && (
+        <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/plan/[id]', params: { id: goalBar.id } })}>
+          <Card style={{ gap: Spacing.s }}>
+            <Row style={{ justifyContent: 'space-between' }}>
+              <Txt variant="label" muted>
+                🎯 Prochain objectif
+              </Txt>
+              <Chip tone="flame" icon="hourglass" label={goalBar.days > 0 ? `J-${goalBar.days}` : 'Jour J'} />
+            </Row>
+            <Txt style={{ fontWeight: '800', fontSize: 20 }}>{goalBar.title}</Txt>
+            <ProgressBar value={goalBar.ratio} height={12} colors={Gradients.energy} />
+            <Row style={{ justifyContent: 'space-between' }}>
+              <Txt variant="caption" muted>
+                {goalBar.done}/{goalBar.total} séances
+              </Txt>
+              <Txt style={{ fontWeight: '800' }} color={t.accent}>
+                {Math.round(goalBar.ratio * 100)} % du chemin 💪
+              </Txt>
+            </Row>
+            {goalBar.estimate ? (
+              <Txt variant="caption" muted>
+                Temps estimé aujourd’hui : {goalBar.estimate} → objectif {goalBar.target}
+              </Txt>
+            ) : null}
+          </Card>
+        </Pressable>
+      )}
 
       {/* ---------- Semaine de course ---------- */}
       {raceSoon && (
@@ -89,27 +168,6 @@ export default function HomeScreen() {
         </Pressable>
       )}
 
-      {/* ---------- Pas du jour (Apple Santé) ---------- */}
-      <Card style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.m, paddingVertical: Spacing.m }}>
-        <View style={[styles.badgeIcon, { backgroundColor: t.xpSoft }]}>
-          <Ionicons name="walk" size={22} color={t.ok} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Txt variant="label" muted>
-            Pas aujourd’hui
-          </Txt>
-          {health === 'connected' ? (
-            <Txt variant="title">{steps == null ? '…' : fmtInt(steps)}</Txt>
-          ) : (
-            <Txt variant="caption" muted>
-              {health === 'available' ? 'Connecte Apple Santé pour les voir ici.' : 'Disponible avec Apple Santé, dans l’app installée.'}
-            </Txt>
-          )}
-        </View>
-        {health === 'available' && <Button small kind="secondary" label="Connecter" onPress={() => router.push('/devices')} />}
-        {health === 'connected' && steps != null && <ProgressBarMini value={steps / 10000} />}
-      </Card>
-
       {/* ---------- Séance du jour / prochaine séance ---------- */}
       {plans.length === 0 ? (
         <PhotoCard image="road" height={300} onPress={() => router.push('/goal')}>
@@ -122,7 +180,7 @@ export default function HomeScreen() {
         </PhotoCard>
       ) : next ? (
         <>
-          <SectionTitle>{next.s.date === today ? 'Aujourd’hui' : 'Prochaine séance'}</SectionTitle>
+          <SectionTitle>{next.s.date === today ? '📅 Aujourd’hui' : '📅 Prochaine séance'}</SectionTitle>
           <PhotoCard image={imageForSession(next.s.type)} height={320} onPress={() => router.push({ pathname: '/session/[id]', params: { id: next.s.id, plan: next.p.id } })}>
             <Row>
               <Chip tone="glass" icon={SESSION_ICON[next.s.type]} label={formatDateFr(next.s.date, { weekday: 'long', day: 'numeric' })} />
@@ -158,19 +216,8 @@ export default function HomeScreen() {
         </Txt>
       </Card>
 
-      {/* ---------- Astuce du jour ---------- */}
-      <Card>
-        <Row style={{ justifyContent: 'space-between' }}>
-          <Chip tone="accent" icon="bulb" label={`Astuce · ${tip.category}`} />
-          {tipRead ? <Chip tone="ok" icon="checkmark" label={`+${LOGIN_XP.tip} XP`} /> : null}
-        </Row>
-        <Txt style={{ fontWeight: '800' }}>{tip.title}</Txt>
-        <Txt muted>{tip.text}</Txt>
-        {!tipRead && <Button kind="secondary" small icon="checkmark" label={`J’ai lu (+${LOGIN_XP.tip} XP)`} onPress={readTip} />}
-      </Card>
-
       {/* ---------- Challenge sponsorisé de la semaine ---------- */}
-      <SectionTitle>Challenge de la semaine</SectionTitle>
+      <SectionTitle>🏆 Challenge de la semaine</SectionTitle>
       <GradientCard colors={Gradients.flame}>
         <Row style={{ justifyContent: 'space-between' }}>
           <Chip tone="glass" icon="megaphone" label={`Proposé par ${sponsored.challenge.sponsor}`} />
@@ -194,7 +241,7 @@ export default function HomeScreen() {
       {/* ---------- Défis de la semaine ---------- */}
       {quests.length > 0 && (
         <>
-          <SectionTitle>Défis de la semaine</SectionTitle>
+          <SectionTitle>⚡ Défis de la semaine</SectionTitle>
           <Card>
             {quests.map((q) => (
               <View key={q.id} style={{ gap: 8 }}>
@@ -222,7 +269,7 @@ export default function HomeScreen() {
       {/* ---------- Mes entraînements ---------- */}
       {plans.length > 0 && (
         <>
-          <SectionTitle action={<Button kind="ghost" small label="Tout voir" onPress={() => router.push('/plans')} />}>Mes entraînements</SectionTitle>
+          <SectionTitle action={<Button kind="ghost" small label="Tout voir" onPress={() => router.push('/plans')} />}>🏃 Mes entraînements</SectionTitle>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: Spacing.m }}>
             {plans.map((p) => {
               const pr = planProgress(p);
@@ -254,7 +301,7 @@ export default function HomeScreen() {
       )}
 
       {/* ---------- Prochains badges ---------- */}
-      <SectionTitle action={<Button kind="ghost" small label="Collection" onPress={() => router.push('/rewards')} />}>Prochains badges</SectionTitle>
+      <SectionTitle action={<Button kind="ghost" small label="Collection" onPress={() => router.push('/rewards')} />}>🏅 Prochains badges</SectionTitle>
       <Card>
         {upcomingBadges.map(({ b, v }) => (
           <Row key={b.id} style={{ gap: Spacing.m }}>
@@ -317,5 +364,6 @@ const styles = StyleSheet.create({
   addCard: { width: 170, height: 190, borderRadius: Radius.l, borderWidth: 2, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', gap: Spacing.s, padding: Spacing.m },
   day: { flex: 1, height: 10, borderRadius: 5 },
   watchBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' },
+  stepsRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.s, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 12, paddingHorizontal: Spacing.m, paddingVertical: 8 },
   badgeIcon: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
 });

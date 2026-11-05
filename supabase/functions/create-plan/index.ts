@@ -3,7 +3,8 @@
 // "facile" avec des séances gonflées en points.
 
 import { adminClient, handle, HttpError, json, requireUser } from '../_shared/supabase.ts';
-import { assessGoal, buildPlan, normalizeClockTime, type Athlete, type PlanRequest } from '../_shared/core/index.ts';
+import { adaptPlanToVma, assessGoal, buildPlan, compareVma, normalizeClockTime, reschedulePlan, type Athlete, type Plan, type PlanRequest } from '../_shared/core/index.ts';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 function ageOf(iso: string, today = new Date()): number {
   const [y, m, d] = iso.split('-').map(Number);
@@ -15,7 +16,9 @@ function ageOf(iso: string, today = new Date()): number {
 Deno.serve(
   handle(async (req) => {
     const user = await requireUser(req);
-    const body = (await req.json()) as PlanRequest;
+    const raw = await req.json();
+    if (raw?.action === 'reschedule' || raw?.action === 'adapt') return json(await modify(adminClient(), user.id, raw));
+    const body = raw as PlanRequest;
     const g = body.goal;
 
     if (!g || !['chrono', 'distance'].includes(g.mode)) throw new HttpError(400, 'invalid_goal');
@@ -93,3 +96,57 @@ Deno.serve(
     return json({ planId: row.id, plan, assessment });
   }),
 );
+
+const rows = (plan: Plan, planId: string, userId: string) =>
+  plan.sessions.map((s) => ({
+    id: s.id,
+    plan_id: planId,
+    user_id: userId,
+    week: s.week,
+    date: s.date,
+    type: s.type,
+    title: s.title,
+    duration_sec: s.durationSec,
+    distance_m: s.distanceM,
+    base_points: s.basePoints,
+    steps: s.steps,
+  }));
+
+/**
+ * Modifier un plan existant :
+ *  - « reschedule » : nouvelle date de début, tant qu'aucune séance n'a été faite ;
+ *  - « adapt » : recalage des allures sur une VMA mesurée, si elle est meilleure que la dernière performance.
+ *    Mêmes semaines et mêmes jours : les séances gardent leurs identifiants et leurs validations.
+ */
+async function modify(db: SupabaseClient, userId: string, body: { action: string; planId?: string; startDate?: string; vma?: number }) {
+  const { data: row } = await db.from('plans').select('id, plan, status').eq('id', body.planId ?? '').eq('user_id', userId).maybeSingle();
+  if (!row || row.status !== 'active') throw new HttpError(404, 'plan_not_found');
+  const plan = row.plan as Plan;
+  const today = new Date().toISOString().slice(0, 10);
+
+  if (body.action === 'reschedule') {
+    const start = String(body.startDate ?? '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || start < today) throw new HttpError(400, 'invalid_start_date');
+    if (start > plan.request.goal.eventDate) throw new HttpError(400, 'start_after_event');
+    const { count } = await db.from('session_validations').select('session_id', { count: 'exact', head: true }).eq('plan_id', row.id);
+    if ((count ?? 0) > 0) throw new HttpError(409, 'plan_already_started');
+    const next = reschedulePlan(plan, start);
+    await db.from('planned_sessions').delete().eq('plan_id', row.id);
+    const { error } = await db.from('planned_sessions').insert(rows(next, row.id, userId));
+    if (error) throw error;
+    await db.from('plans').update({ plan: next, start_date: start }).eq('id', row.id);
+    return { plan: next };
+  }
+
+  const vma = Number(body.vma);
+  if (!(vma >= 6 && vma <= 26)) throw new HttpError(400, 'invalid_vma');
+  const cmp = compareVma(plan, vma);
+  if (!cmp.adapt) return { plan, comparison: cmp, adapted: false };
+  const next = { ...adaptPlanToVma(plan, vma), vma: { value: vma, date: today } };
+  if (next.sessions.map((s) => s.id).join() !== plan.sessions.map((s) => s.id).join()) throw new HttpError(409, 'plan_shape_changed');
+  // Mise à jour en place (jamais de suppression : les validations y sont rattachées).
+  const { error } = await db.from('planned_sessions').upsert(rows(next, row.id, userId), { onConflict: 'plan_id,id' });
+  if (error) throw error;
+  await db.from('plans').update({ plan: next, level: next.request.level }).eq('id', row.id);
+  return { plan: next, comparison: cmp, adapted: true };
+}

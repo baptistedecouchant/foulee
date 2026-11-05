@@ -1,9 +1,12 @@
-import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View, type ScrollViewInstance } from 'react-native';
-import { daysBetween, ECONOMY, formatDuration, formatPace, type Phase, type PlannedSession } from '@foulee/core';
+import { addDays, daysBetween, ECONOMY, formatDuration, formatPace, type Phase, type PlannedSession } from '@foulee/core';
 
-import { Button, Card, Chip, Ionicons, IntensityProfile, ProgressBar, Row, Txt } from '@/components/ui';
+import { CalendarPicker } from '@/components/pickers';
+import { Button, Card, Chip, Ionicons, IntensityProfile, ProgressBar, Row, Segmented, Txt } from '@/components/ui';
+import { VmaTest } from '@/components/vma-test';
+import { takePendingVma } from '@/lib/vma-bridge';
 import { GradientCard, PhotoCard } from '@/components/visuals';
 import { Gradients, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -14,12 +17,28 @@ import { callFunction, isDemo } from '@/lib/supabase';
 import { RaceWeek } from '@/components/race-week';
 import { useAthlete } from '@/lib/athlete';
 
-const PHASE_LABEL: Record<Phase, string> = { base: 'Fondations', dev: 'Développement', spe: 'Spécifique', taper: 'Affûtage' };
+const PHASE_LABEL: Record<Phase, string> = { base: '🧱 Fondations', dev: '📈 Développement', spe: '🎯 Spécifique', taper: '🪶 Affûtage' };
 
 export default function PlanScreen() {
   const t = useTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { getPlan, removePlan, setEnrichment } = useStore();
+  const { getPlan, removePlan, setEnrichment, reschedulePlan } = useStore();
+  const [tab, setTab] = useState<'plan' | 'vma'>('plan');
+  const [measured, setMeasured] = useState<number | null>(null);
+  const [editStart, setEditStart] = useState(false);
+  const [newStart, setNewStart] = useState<string | null>(null);
+  const [startBusy, setStartBusy] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
+  // Retour d'un test VMA couru dans l'app : on ouvre l'onglet avec la distance mesurée.
+  useFocusEffect(
+    useCallback(() => {
+      const m = takePendingVma(id);
+      if (m) {
+        setMeasured(m);
+        setTab('vma');
+      }
+    }, [id]),
+  );
   const [confirmDelete, setConfirmDelete] = useState(false);
   // La confirmation s'ouvre en bas de l'écran : on fait défiler pour qu'elle soit entièrement visible.
   const scrollRef = useRef<ScrollViewInstance>(null);
@@ -97,7 +116,58 @@ export default function PlanScreen() {
         <ProgressBar value={pr.ratio} height={8} track="rgba(255,255,255,0.25)" colors={Gradients.gold} />
       </PhotoCard>
 
-      {daysLeft >= 0 && daysLeft <= 7 ? (
+      <Segmented<'plan' | 'vma'>
+        value={tab}
+        onChange={setTab}
+        options={[
+          { value: 'plan', label: '📋 Programme' },
+          { value: 'vma', label: '⚡ Test VMA' },
+        ]}
+      />
+
+      {tab === 'vma' ? <VmaTest entry={entry} measured={measured} /> : null}
+
+      {tab === 'plan' && Object.keys(entry.validations).length === 0 && daysLeft > 7 && (
+        <Card>
+          <Row style={{ justifyContent: 'space-between' }}>
+            <View style={{ flex: 1 }}>
+              <Txt variant="caption" muted>
+                📅 Début du plan
+              </Txt>
+              <Txt style={{ fontWeight: '700' }}>{formatDateFr(plan.request.startDate, { weekday: 'long', day: 'numeric', month: 'long' })}</Txt>
+            </View>
+            <Button kind="ghost" small label={editStart ? 'Fermer' : 'Modifier'} onPress={() => setEditStart(!editStart)} />
+          </Row>
+          {editStart && (
+            <>
+              <CalendarPicker value={newStart ?? plan.request.startDate} onChange={setNewStart} min={today} max={addDays(g.eventDate, -7)} />
+              <Txt variant="caption" muted>
+                Toutes les séances se recalent à partir de cette date, jusqu’au jour J.
+              </Txt>
+              {startError && <Txt color={t.bad}>{startError}</Txt>}
+              <Button
+                label={startBusy ? 'Mise à jour…' : 'Valider la nouvelle date'}
+                disabled={!newStart || newStart === plan.request.startDate || startBusy}
+                onPress={async () => {
+                  if (!newStart) return;
+                  setStartBusy(true);
+                  setStartError(null);
+                  try {
+                    await reschedulePlan(entry.id, newStart);
+                    setEditStart(false);
+                  } catch (e) {
+                    setStartError(/already_started/.test(String((e as Error)?.message)) ? 'Une séance est déjà faite : la date de début ne peut plus changer.' : 'La date n’a pas pu être modifiée. Réessaie.');
+                  } finally {
+                    setStartBusy(false);
+                  }
+                }}
+              />
+            </>
+          )}
+        </Card>
+      )}
+
+      {tab !== 'plan' ? null : daysLeft >= 0 && daysLeft <= 7 ? (
         <RaceWeek plan={plan} daysLeft={daysLeft} weightKg={athlete.weightKg} />
       ) : daysLeft > 7 ? (
         showRaceWeek ? (
@@ -110,7 +180,7 @@ export default function PlanScreen() {
         )
       ) : null}
 
-      {!AI_COACH_ENABLED ? null : entry.enrichment ? (
+      {!AI_COACH_ENABLED || tab !== 'plan' ? null : entry.enrichment ? (
         <GradientCard colors={Gradients.energy}>
           <Row>
             <Ionicons name="sparkles" size={18} color="#fff" />
@@ -145,7 +215,7 @@ export default function PlanScreen() {
         </Card>
       )}
 
-      {plan.weeks.map((w) => (
+      {tab === 'plan' && plan.weeks.map((w) => (
         <WeekBlock key={w.n} entry={entry} n={w.n} phase={w.phase} initiallyOpen={w.n === currentWeek} />
       ))}
 

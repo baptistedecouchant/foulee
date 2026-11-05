@@ -100,7 +100,7 @@ export default function SessionScreen() {
           {v.trust.flags.length > 0 && (
             <View style={{ gap: 4 }}>
               <Txt variant="label" muted>
-                Contrôles GPS et capteurs
+                🛰️ Contrôles GPS et capteurs
               </Txt>
               {v.trust.flags.map((f, i) => (
                 <Row key={i} style={{ alignItems: 'flex-start' }}>
@@ -122,7 +122,7 @@ export default function SessionScreen() {
 
       <Card>
         <Txt variant="label" muted>
-          Déroulé
+          🗺️ Déroulé
         </Txt>
         <StepList steps={session.steps} />
       </Card>
@@ -131,7 +131,7 @@ export default function SessionScreen() {
         <Row>
           <Ionicons name={ai ? 'sparkles' : 'bulb'} size={18} color={t.violet} />
           <Txt variant="label" muted>
-            {ai ? 'Conseil du coach' : 'Conseil'}
+            {ai ? '💡 Conseil du coach' : '💡 Conseil'}
           </Txt>
         </Row>
         <Txt>{ai?.tip ?? session.tip}</Txt>
@@ -140,7 +140,7 @@ export default function SessionScreen() {
             <Row>
               <Ionicons name="body" size={18} color={t.accent} />
               <Txt variant="label" muted>
-                Échauffement et récupération
+                🔥 Échauffement et récupération
               </Txt>
             </Row>
             <Txt>{warmup}</Txt>
@@ -152,7 +152,7 @@ export default function SessionScreen() {
         <Row>
           <Ionicons name="nutrition" size={18} color={t.xp} />
           <Txt variant="label" muted>
-            Nutrition
+            🍝 Nutrition
           </Txt>
         </Row>
         {ai?.nutrition ? <Txt style={{ fontWeight: '700' }}>{ai.nutrition}</Txt> : null}
@@ -186,7 +186,7 @@ export default function SessionScreen() {
         <Row>
           <Ionicons name="watch" size={18} color={t.accent} />
           <Txt variant="label" muted>
-            Sur ta montre
+            ⌚ Sur ta montre
           </Txt>
         </Row>
         {entry.sent[session.id] ? (

@@ -8,6 +8,8 @@ import { Gradients, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { formatDateFr } from '@/lib/store';
 
+const EMOJI: Record<string, string> = { bed: '😴', restaurant: '🍝', walk: '🎒', cafe: '☕', flash: '⚡', nutrition: '🍌', water: '💧', flag: '🏁' };
+
 /** « 09:30 » → « 9 h 30 » */
 const clock = (hhmm: string) => `${Number(hhmm.slice(0, 2))} h ${hhmm.slice(3, 5)}`;
 
@@ -72,7 +74,9 @@ export function RaceWeek({ plan, daysLeft, weightKg }: { plan: Plan; daysLeft: n
                   <Txt variant="caption" muted>
                     {s.when}
                   </Txt>
-                  <Txt style={{ fontWeight: '600' }}>{s.title}</Txt>
+                  <Txt style={{ fontWeight: '600' }}>
+                    {EMOJI[s.icon] ?? ''} {s.title}
+                  </Txt>
                 </View>
                 <Ionicons name={isOpen ? 'chevron-up' : 'chevron-down'} size={16} color={t.textSecondary} />
               </Pressable>

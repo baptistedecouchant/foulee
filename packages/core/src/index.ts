@@ -16,3 +16,4 @@ export * from './economy.ts';
 export * from './tips.ts';
 export * from './shoes.ts';
 export * from './races.ts';
+export * from './vma.ts';

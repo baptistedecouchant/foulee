@@ -3,13 +3,14 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Linking, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ECONOMY, formatDuration, formatPace, formatTime, nutritionFor, warmupAdvice, type PlannedSession } from '@foulee/core';
+import { distanceBetween, ECONOMY, formatDuration, formatPace, formatTime, nutritionFor, vmaTestSession, VMA_TEST_ID, warmupAdvice, type PlannedSession } from '@foulee/core';
 
 import { Button, Chip, Ionicons, ProgressBar, Row, Txt } from '@/components/ui';
 import { Fonts, Gradients, Radius, Spacing } from '@/constants/theme';
 import { useStore, type PlanEntry } from '@/lib/store';
 import { isDemo } from '@/lib/supabase';
 import { useRunSession, type GpsState } from '@/lib/useRunSession';
+import { setPendingVma } from '@/lib/vma-bridge';
 
 // Écran de course : toujours sombre, gros chiffres, lisible en plein soleil et en courant.
 const C = {
@@ -28,7 +29,8 @@ export default function RunScreen() {
   const { id, plan: planId } = useLocalSearchParams<{ id: string; plan: string }>();
   const { getPlan } = useStore();
   const entry = getPlan(planId);
-  const session = entry?.plan.sessions.find((s) => s.id === id);
+  // Le test VMA n'est pas une séance du plan : on le construit à la volée.
+  const session = entry ? (id === VMA_TEST_ID ? vmaTestSession(entry.plan, new Date().toISOString().slice(0, 10)) : entry.plan.sessions.find((s) => s.id === id)) : undefined;
   if (!entry || !session) {
     return (
       <View style={{ flex: 1, backgroundColor: C.bg, padding: Spacing.l, justifyContent: 'center' }}>
@@ -77,10 +79,25 @@ function Run({ entry, session }: { entry: PlanEntry; session: PlannedSession }) 
     }
   }, [v.countdown, goScale]);
 
+  const isTest = session.id === VMA_TEST_ID;
   const validate = async () => {
     setSaving(true);
     setError(null);
     const activity = runner.finish();
+    if (isTest) {
+      // Distance courue pendant le bloc « 6 min à fond » → VMA, validée sur l'écran du plan.
+      const i = runner.steps.findIndex((st) => st.label.startsWith('Test'));
+      const lap = activity?.laps?.[i];
+      const meters = activity && lap ? distanceBetween(activity.track ?? [], lap.start, lap.end) : 0;
+      setSaving(false);
+      if (meters < 500) {
+        setError('Le bloc de 6 minutes n’a pas été mesuré (GPS ou test interrompu). Tu pourras saisir ta distance à la main.');
+        return;
+      }
+      setPendingVma(entry.id, meters);
+      router.back();
+      return;
+    }
     if (!activity) {
       setSaving(false);
       setError('Séance trop courte pour être validée (moins d’une minute ou pas assez de points GPS).');
@@ -250,7 +267,7 @@ function Run({ entry, session }: { entry: PlanEntry; session: PlannedSession }) 
           {error && <Txt color={C.fast}>{error}</Txt>}
         </ScrollView>
         <View style={[styles.bottom, { paddingBottom: insets.bottom + Spacing.l, gap: Spacing.s }]}>
-          <Button kind="gold" icon="checkmark-circle" label={saving ? 'Vérification…' : 'Valider ma séance'} disabled={saving} onPress={validate} />
+          <Button kind="gold" icon="checkmark-circle" label={saving ? 'Vérification…' : isTest ? 'Calculer ma VMA' : 'Valider ma séance'} disabled={saving} onPress={validate} />
           <Button kind="ghost" label="Quitter sans valider" onPress={() => router.back()} />
         </View>
       </View>

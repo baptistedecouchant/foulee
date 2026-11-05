@@ -48,10 +48,10 @@ const LEVELS: Array<{ id: Extract<CurrentLevel, { kind: 'estimate' }>['level']; 
 ];
 
 const DISTANCES = [
-  { km: 5, label: '5 km' },
-  { km: 10, label: '10 km' },
-  { km: 21.0975, label: 'Semi-marathon' },
-  { km: 42.195, label: 'Marathon' },
+  { km: 5, label: '5 km', short: '5 km' },
+  { km: 10, label: '10 km', short: '10 km' },
+  { km: 21.0975, label: 'Semi-marathon', short: 'Semi' },
+  { km: 42.195, label: 'Marathon', short: 'Marathon' },
 ];
 
 /** Objectifs proposés, rangés par distance (sans chrono = « finir »). */
@@ -60,7 +60,7 @@ const PRESETS: Record<number, Array<{ id: string; sec?: number; sub: string }>> 
     { id: '5-35', sec: 2100, sub: 'en 35 min' },
     { id: '5-30', sec: 1800, sub: 'en 30 min' },
     { id: '5-25', sec: 1500, sub: 'en 25 min' },
-    { id: '5-fin', sub: 'le finir' },
+    { id: '5-fin', sub: 'sans chrono' },
   ],
   10: [
     { id: '10-60', sec: 3600, sub: 'en 1 h' },
@@ -72,13 +72,13 @@ const PRESETS: Record<number, Array<{ id: string; sec?: number; sub: string }>> 
     { id: 'semi-215', sec: 8100, sub: 'en 2 h 15' },
     { id: 'semi-200', sec: 7200, sub: 'en 2 h' },
     { id: 'semi-145', sec: 6300, sub: 'en 1 h 45' },
-    { id: 'semi-fin', sub: 'le finir' },
+    { id: 'semi-fin', sub: 'sans chrono' },
   ],
   42.195: [
     { id: 'mara-430', sec: 16200, sub: 'en 4 h 30' },
     { id: 'mara-400', sec: 14400, sub: 'en 4 h' },
     { id: 'mara-345', sec: 13500, sub: 'en 3 h 45' },
-    { id: 'mara-fin', sub: 'le finir' },
+    { id: 'mara-fin', sub: 'sans chrono' },
   ],
 };
 
@@ -105,13 +105,25 @@ type When = 'race' | 'date';
 type Step = 'toi' | 'perf' | 'course' | 'rythme' | 'objectif' | 'recap';
 const STEPS: Step[] = ['toi', 'perf', 'course', 'rythme', 'objectif', 'recap'];
 
+interface Celebration {
+  id: string;
+  at: number;
+  start: string;
+  title: string;
+  subtitle: string;
+  stats: Array<{ icon: 'calendar' | 'repeat' | 'flag' | 'speedometer'; label: string }>;
+}
+/** Survit à un éventuel rechargement de l'écran pendant la création du plan. */
+let pendingCelebration: Celebration | null = null;
+
 export default function GoalScreen() {
   const t = useTheme();
   const insets = useSafeAreaInsets();
-  const { createPlan, plans, runs } = useStore();
+  const { createPlan, plans, runs, getPlan } = useStore();
   const { athlete: saved, save: saveAthlete } = useAthlete();
   const today = todayIso();
-  const start = suggestedStartDate(today);
+  const [start, setStart] = useState(() => pendingCelebration?.start ?? suggestedStartDate(today));
+  const [editStart, setEditStart] = useState(false);
   const scroll = useRef<ScrollViewInstance>(null);
   const recent = useMemo(() => runs.filter((r) => r.distanceKm >= 3 && r.durationSec > 600).slice(0, 5), [runs]);
 
@@ -145,7 +157,9 @@ export default function GoalScreen() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tried, setTried] = useState(false);
-  const [created, setCreated] = useState<string | null>(null);
+  // Si la navigation se recharge pendant la création, on retrouve l'écran de félicitations.
+  const [created, setCreated] = useState<Celebration | null>(() => (pendingCelebration && Date.now() - pendingCelebration.at < 5 * 60_000 ? pendingCelebration : null));
+  const [distTab, setDistTab] = useState<number>(10);
 
   // Le profil peut arriver juste après l'ouverture : on reprend les valeurs et on saute l'étape « Toi ».
   const touched = useRef(false);
@@ -189,6 +203,8 @@ export default function GoalScreen() {
   const presetKm = preset && preset !== 'custom' ? Number(Object.keys(PRESETS).find((k) => PRESETS[Number(k)].some((p) => p.id === preset))) : null;
   const km = when === 'race' && raceKm ? raceKm : (presetKm ?? customKm);
   const allowedKms = when === 'race' && race ? (raceKm ? [raceKm] : race.distances) : DISTANCES.map((d) => d.km);
+  const tabs = DISTANCES.filter((d) => allowedKms.some((k) => sameKm(k, d.km)));
+  const tabKm = tabs.find((d) => d.km === distTab)?.km ?? tabs[0]?.km ?? 10;
 
   const assessAt = (k: number, sec: number | undefined, n: SessionsPerWeek = sessions) =>
     currentLevel && eventDate
@@ -215,7 +231,7 @@ export default function GoalScreen() {
   const raceInfo = when === 'race' && race ? { name: race.name, city: race.city, startTime: startTime ?? race.startTime } : startTime ? { name: `${distanceLabel(km)} du ${eventDate ? formatDateFr(eventDate, { day: 'numeric', month: 'long' }) : ''}`, startTime } : undefined;
 
   const request: PlanRequest | null =
-    currentLevel && eventDate && preset && !targetProblem && daysOk
+    currentLevel && eventDate && preset && !targetProblem && daysOk && start < eventDate
       ? {
           goal: { mode, sport: 'running', distanceKm: km, targetTimeSec: mode === 'chrono' ? targetSec! : undefined, eventDate, race: raceInfo },
           level: currentLevel,
@@ -246,6 +262,7 @@ export default function GoalScreen() {
       if (!preset) return 'Choisis ton objectif.';
       return targetProblem;
     }
+    if (s === 'recap' && eventDate && start >= eventDate) return 'La date de début doit être avant le jour J.';
     if (s === 'recap' && !request) return targetProblem ?? 'Vérifie les étapes précédentes.';
     return null;
   };
@@ -281,8 +298,8 @@ export default function GoalScreen() {
   const toggleCustom = () => {
     if (preset === 'custom') return setPreset(null);
     setPreset('custom');
-    setCustomKm(allowedKms[0]);
-    const b = boundsFor(allowedKms[0]);
+    setCustomKm(tabKm);
+    const b = boundsFor(tabKm);
     setMode('chrono');
     setTargetSec(b ? b.likely : null);
   };
@@ -298,7 +315,27 @@ export default function GoalScreen() {
     setSaving(true);
     setError(null);
     try {
-      setCreated(await createPlan(request));
+      const id = await createPlan(request);
+      const n = request.sessionsPerWeek;
+      const c: Celebration = {
+        id,
+        at: Date.now(),
+        start,
+        title: raceInfo?.name && when === 'race' ? `Cap sur ${raceInfo.name} !` : 'Ton plan est prêt !',
+        subtitle:
+          mode === 'chrono' && targetSec
+            ? `${distanceLabel(km)} en ${formatTime(targetSec)} : chaque séance te rapproche de ton chrono.`
+            : `Objectif : ${distanceLabel(km)} sans chrono. Une séance après l’autre, tu vas y arriver.`,
+        stats: [
+          ...(eventDate ? [{ icon: 'calendar' as const, label: `Jour J : ${formatDateFr(eventDate, { weekday: 'long', day: 'numeric', month: 'long' })} (J-${daysBetween(today, eventDate)})` }] : []),
+          { icon: 'repeat' as const, label: `${planWeeks} semaine${planWeeks > 1 ? 's' : ''} · ${n} séance${n > 1 ? 's' : ''} par semaine` },
+          ...(assessment ? [{ icon: 'speedometer' as const, label: `Ton défi : ${assessment.title.toLowerCase()}` }] : []),
+          { icon: 'flag' as const, label: `Début du plan : ${formatDateFr(start, { weekday: 'long', day: 'numeric', month: 'long' })}` },
+        ],
+      };
+      pendingCelebration = c;
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      setCreated(c);
     } catch (e) {
       const code = String((e as { message?: string })?.message ?? '');
       setError(code.includes('too_many_active_plans') ? `Tu as déjà ${MAX_ACTIVE_PLANS} objectifs en cours.` : 'Le plan n’a pas pu être créé. Vérifie ta connexion et réessaie.');
@@ -313,29 +350,21 @@ export default function GoalScreen() {
 
   // ---------- Félicitations ----------
   if (created) {
-    const n = request?.sessionsPerWeek ?? sessions;
+    const leave = (to: 'session' | 'plan') => {
+      const planId = created.id;
+      pendingCelebration = null;
+      const entry = getPlan(planId);
+      const first = entry?.plan.sessions.find((x) => x.date >= today) ?? entry?.plan.sessions[0];
+      router.dismiss();
+      setTimeout(() => {
+        if (to === 'session' && first) router.push({ pathname: '/session/[id]', params: { id: first.id, plan: planId } });
+        else router.push({ pathname: '/plan/[id]', params: { id: planId } });
+      }, 60);
+    };
     return (
       <>
         <Stack.Screen options={{ headerShown: false, gestureEnabled: false }} />
-        <GoalCelebration
-          title={raceInfo?.name && when === 'race' ? `Cap sur ${raceInfo.name} !` : 'Ton plan est prêt !'}
-          subtitle={
-            mode === 'chrono' && targetSec
-              ? `${distanceLabel(km)} en ${formatTime(targetSec)} : chaque séance te rapproche de ton chrono.`
-              : `Objectif : finir ${distanceLabel(km)}. Une séance après l’autre, tu vas y arriver.`
-          }
-          stats={[
-            ...(eventDate ? [{ icon: 'calendar' as const, label: `Jour J : ${formatDateFr(eventDate, { weekday: 'long', day: 'numeric', month: 'long' })} (J-${daysBetween(today, eventDate)})` }] : []),
-            { icon: 'repeat', label: `${planWeeks} semaine${planWeeks > 1 ? 's' : ''} · ${n} séance${n > 1 ? 's' : ''} par semaine` },
-            ...(assessment ? [{ icon: 'speedometer' as const, label: assessment.title }] : []),
-            { icon: 'flag', label: `Début du plan : ${formatDateFr(start, { weekday: 'long', day: 'numeric', month: 'long' })}` },
-          ]}
-          onDone={() => {
-            const id = created;
-            router.dismiss();
-            setTimeout(() => router.push({ pathname: '/plan/[id]', params: { id } }), 50);
-          }}
-        />
+        <GoalCelebration title={created.title} subtitle={created.subtitle} stats={created.stats} onStart={() => leave('session')} onPlan={() => leave('plan')} />
       </>
     );
   }
@@ -637,58 +666,75 @@ export default function GoalScreen() {
               title="Quel est ton objectif ?"
               sub={eventDate ? `Pour ta course du ${formatDateFr(eventDate, { day: 'numeric', month: 'long' })}, avec ${sessions} séance${sessions > 1 ? 's' : ''} par semaine.` : ''}
             />
-            {DISTANCES.filter((d) => allowedKms.some((k) => sameKm(k, d.km))).map((d) => (
-              <View key={d.km} style={{ gap: Spacing.s }}>
-                <Txt style={styles.catTitle} color={t.textSecondary}>
-                  {d.label}
-                </Txt>
-                <View style={styles.grid}>
-                  {PRESETS[d.km].map((p) => {
-                    const on = preset === p.id;
-                    const b = boundsFor(d.km);
-                    const later = !!(p.sec && b && p.sec < b.min);
-                    const done = !!(p.sec && b && p.sec > b.max);
-                    const a = assessAt(d.km, p.sec);
-                    const lvl = objectiveLevel({ mode: p.sec ? 'chrono' : 'distance', distanceKm: d.km, targetTimeSec: p.sec });
-                    const off = later || done;
-                    return (
-                      <Pressable
-                        key={p.id}
-                        accessibilityRole="radio"
-                        accessibilityLabel={`${d.label} ${p.sub}`}
-                        accessibilityState={{ selected: on, disabled: off }}
-                        disabled={off}
-                        onPress={() => pickPreset(d.km, p)}
-                        style={({ pressed }) => [
-                          styles.preset,
-                          styles.shadow,
-                          { backgroundColor: on ? t.accentSoft : t.surface, borderColor: on ? t.accent : 'transparent', opacity: off ? 0.5 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] },
-                        ]}>
-                        <LevelBars level={lvl} />
-                        <Txt style={styles.presetTitle} color={on ? t.accent : t.text}>
-                          {p.sub}
-                        </Txt>
-                        <Txt variant="caption" color={off ? t.textSecondary : a ? toneOf(a.feasibility, t) : t.textSecondary} style={{ fontWeight: '600' }}>
-                          {later ? 'Pour un prochain objectif' : done ? 'Déjà dans tes jambes' : a ? a.title : ''}
-                        </Txt>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </View>
-            ))}
+            {tabs.length > 1 && (
+              <Segment
+                options={tabs.map((d) => ({ value: String(d.km), label: d.short }))}
+                value={String(tabKm)}
+                onChange={(v) => {
+                  setDistTab(Number(v));
+                  if (preset === 'custom') {
+                    setCustomKm(Number(v));
+                    const b = boundsFor(Number(v));
+                    if (b) setTargetSec(b.likely);
+                  }
+                }}
+              />
+            )}
 
             <Pressable
               accessibilityRole="radio"
+              accessibilityLabel="Objectif sur mesure"
               accessibilityState={{ selected: preset === 'custom' }}
               onPress={toggleCustom}
               style={[styles.option, styles.shadow, { backgroundColor: preset === 'custom' ? t.accentSoft : t.surface, borderColor: preset === 'custom' ? t.accent : 'transparent' }]}>
               <Ionicons name="options-outline" size={20} color={t.accent} />
-              <Txt style={{ fontWeight: '600', flex: 1 }} color={t.accent}>
-                Objectif sur mesure
-              </Txt>
+              <View style={{ flex: 1 }}>
+                <Txt style={{ fontWeight: '600' }} color={t.accent}>
+                  ✏️ Objectif sur mesure
+                </Txt>
+                <Txt variant="caption" muted>
+                  Choisis ton propre temps sur {distanceLabel(tabKm)}
+                </Txt>
+              </View>
               <Ionicons name={preset === 'custom' ? 'chevron-up' : 'chevron-down'} size={16} color={t.accent} />
             </Pressable>
+
+            {preset !== 'custom' && (
+              <View style={styles.grid}>
+                {PRESETS[tabKm].map((p) => {
+                  const on = preset === p.id;
+                  const b = boundsFor(tabKm);
+                  const later = !!(p.sec && b && p.sec < b.min);
+                  const done = !!(p.sec && b && p.sec > b.max);
+                  const a = assessAt(tabKm, p.sec);
+                  const lvl = objectiveLevel({ mode: p.sec ? 'chrono' : 'distance', distanceKm: tabKm, targetTimeSec: p.sec });
+                  const off = later || done;
+                  const label = DISTANCES.find((d) => d.km === tabKm)!.label;
+                  return (
+                    <Pressable
+                      key={p.id}
+                      accessibilityRole="radio"
+                      accessibilityLabel={`${label} ${p.sub}`}
+                      accessibilityState={{ selected: on, disabled: off }}
+                      disabled={off}
+                      onPress={() => pickPreset(tabKm, p)}
+                      style={({ pressed }) => [
+                        styles.preset,
+                        styles.shadow,
+                        { backgroundColor: on ? t.accentSoft : t.surface, borderColor: on ? t.accent : 'transparent', opacity: off ? 0.5 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] },
+                      ]}>
+                      <LevelBars level={lvl} />
+                      <Txt style={styles.presetTitle} color={on ? t.accent : t.text}>
+                        {p.sec ? p.sub : '🏁 Sans chrono'}
+                      </Txt>
+                      <Txt variant="caption" color={off ? t.textSecondary : a ? toneOf(a.feasibility, t) : t.textSecondary} style={{ fontWeight: '600' }}>
+                        {later ? 'Pour un prochain objectif' : done ? 'Déjà dans tes jambes' : !p.sec ? 'Juste aller au bout' : a ? a.title : ''}
+                      </Txt>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
 
             {preset === 'custom' && (
               <Card>
@@ -703,22 +749,6 @@ export default function GoalScreen() {
                     if (v === 'chrono' && !targetSec && bounds) setTargetSec(bounds.likely);
                   }}
                 />
-                {allowedKms.length > 1 && (
-                  <View style={styles.wrap}>
-                    {DISTANCES.filter((d) => allowedKms.some((k) => sameKm(k, d.km))).map((d) => (
-                      <Pill
-                        key={d.km}
-                        label={d.km === 21.0975 ? 'Semi' : d.label}
-                        active={sameKm(customKm, d.km)}
-                        onPress={() => {
-                          setCustomKm(d.km);
-                          const b = boundsFor(d.km);
-                          if (b) setTargetSec(b.likely);
-                        }}
-                      />
-                    ))}
-                  </View>
-                )}
                 {mode === 'chrono' && (
                   <>
                     <DurationPicker
@@ -772,7 +802,7 @@ export default function GoalScreen() {
             race={raceInfo}
             plansCount={plans.length}
             assessment={assessment}
-            problem={request ? null : problemOf('objectif') ?? problemOf('course') ?? problemOf('perf') ?? problemOf('rythme')}
+            problem={request ? null : problemOf('objectif') ?? problemOf('course') ?? problemOf('perf') ?? problemOf('rythme') ?? problemOf('recap')}
             fix={fixTarget}
             onFix={(v) => setTargetSec(v)}
             goTo={(name) => setStep(STEPS.indexOf(name))}
@@ -789,7 +819,22 @@ export default function GoalScreen() {
             request={request}
             athlete={athlete}
             start={start}
+            onEditStart={() => setEditStart(!editStart)}
           />
+        )}
+        {s === 'recap' && editStart && eventDate && (
+          <Card>
+            <Txt style={{ fontWeight: '700' }}>📅 Date de début du plan</Txt>
+            <CalendarPicker
+              value={start}
+              onChange={(d) => {
+                setStart(d);
+                setEditStart(false);
+              }}
+              min={today}
+              max={addDays(eventDate, -1)}
+            />
+          </Card>
         )}
 
         {tried && problem && s !== 'objectif' && s !== 'recap' ? <Notice text={problem} /> : null}
@@ -852,6 +897,7 @@ function Recap(p: {
   request: PlanRequest | null;
   athlete: Athlete;
   start: string;
+  onEditStart: () => void;
 }) {
   const t = useTheme();
   const ls = LEVEL_STYLE[p.objLevel];
@@ -957,12 +1003,9 @@ function Recap(p: {
           label="Objectif"
           value={p.mode === 'chrono' && p.targetSec ? `${distanceLabel(p.km)} en ${formatTime(p.targetSec)}` : `Finir : ${distanceLabel(p.km)}`}
           onEdit={() => p.goTo('objectif')}
-          last
         />
+        <RecapRow icon="play-outline" label="Début du plan" value={formatDateFr(p.start, { weekday: 'long', day: 'numeric', month: 'long' })} onEdit={p.onEditStart} last />
       </Card>
-      <Txt variant="caption" muted style={{ textAlign: 'center' }}>
-        Début du plan : {formatDateFr(p.start, { weekday: 'long', day: 'numeric', month: 'long' })}
-      </Txt>
     </>
   );
 }

@@ -10,6 +10,10 @@ import {
   evaluateSession,
   type Activity,
   type Athlete,
+  adaptPlanToVma,
+  compareVma,
+  reschedulePlan as reschedule,
+  type VmaComparison,
   assignRuns,
   shoeWear,
   type RunLog,
@@ -220,6 +224,10 @@ interface Store extends PersistedState {
   createPlan(req: PlanRequest): Promise<string>;
   /** Supprime un entraînement. Renvoie false si le serveur a refusé (le plan est remis). */
   removePlan(id: string): Promise<boolean>;
+  /** Nouvelle date de début (avant la première séance faite). */
+  reschedulePlan(id: string, startDate: string): Promise<void>;
+  /** Enregistre une VMA mesurée ; recale le plan si elle est meilleure que la dernière performance. */
+  applyVma(id: string, vma: number): Promise<{ comparison: VmaComparison; adapted: boolean }>;
   setEnrichment(planId: string, e: Enrichment): void;
   setConnection(p: Provider, on: boolean): void;
   setLocalAthlete(a: Athlete): void;
@@ -632,6 +640,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
     dismissCelebration: () => setCelebration(null),
     getPlan: (id) => state.plans.find((p) => p.id === id),
     createPlan,
+    reschedulePlan: async (id, startDate) => {
+      const entry = state.plans.find((p) => p.id === id);
+      if (!entry) throw new Error('plan_not_found');
+      if (Object.keys(entry.validations).length) throw new Error('plan_already_started');
+      if (isDemo) {
+        updatePlan(id, (p) => ({ ...p, plan: reschedule(p.plan, startDate), sent: {} }));
+        return;
+      }
+      await callFunction('create-plan', { action: 'reschedule', planId: id, startDate });
+      await refresh();
+    },
+    applyVma: async (id, vma) => {
+      const entry = state.plans.find((p) => p.id === id);
+      if (!entry) throw new Error('plan_not_found');
+      const comparison = compareVma(entry.plan, vma);
+      if (isDemo) {
+        const today = todayIso();
+        updatePlan(id, (p) => ({ ...p, plan: comparison.adapt ? { ...adaptPlanToVma(p.plan, vma), vma: { value: vma, date: today } } : { ...p.plan, vma: { value: vma, date: today } } }));
+        return { comparison, adapted: comparison.adapt };
+      }
+      const res = await callFunction<{ adapted: boolean }>('create-plan', { action: 'adapt', planId: id, vma });
+      await refresh();
+      return { comparison, adapted: !!res.adapted };
+    },
     removePlan: async (id) => {
       // En ligne : le serveur confirme d'abord, puis le plan disparaît de l'écran.
       if (supabase) {

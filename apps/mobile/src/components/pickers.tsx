@@ -32,7 +32,7 @@ function Sheet({ visible, title, onClose, onConfirm, children }: { visible: bool
 function Wheel({ values, value, onChange, label, format }: { values: number[]; value: number; onChange: (v: number) => void; label?: string; format?: (v: number) => string }) {
   const t = useTheme();
   return (
-    <View style={{ flex: 1, alignItems: 'center' }}>
+    <View style={{ flex: 1, minWidth: 84, alignItems: 'stretch' }}>
       <Picker
         selectedValue={value}
         onValueChange={(v) => {
@@ -40,14 +40,14 @@ function Wheel({ values, value, onChange, label, format }: { values: number[]; v
           onChange(Number(v));
         }}
         style={[styles.wheel, Platform.OS === 'web' && { color: t.text, backgroundColor: t.surfaceAlt, borderColor: t.line }]}
-        itemStyle={{ color: t.text, fontSize: 22 }}
+        itemStyle={{ color: t.text, fontSize: 20, height: 190 }}
         dropdownIconColor={t.text}>
         {values.map((v) => (
           <Picker.Item key={v} label={format ? format(v) : String(v)} value={v} color={Platform.OS === 'android' ? undefined : t.text} />
         ))}
       </Picker>
       {label ? (
-        <Txt variant="caption" muted>
+        <Txt variant="caption" muted style={{ textAlign: 'center' }}>
           {label}
         </Txt>
       ) : null}
@@ -85,6 +85,7 @@ export function NumberPicker({
   max,
   initial,
   flex,
+  step = 1,
 }: {
   label: string;
   unit: string;
@@ -94,10 +95,11 @@ export function NumberPicker({
   max: number;
   initial: number;
   flex?: boolean;
+  step?: number;
 }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(value ?? initial);
-  const values = useMemo(() => Array.from({ length: max - min + 1 }, (_, i) => min + i), [min, max]);
+  const values = useMemo(() => Array.from({ length: Math.floor((max - min) / step) + 1 }, (_, i) => min + i * step), [min, max, step]);
   return (
     <View style={flex ? { flex: 1 } : undefined}>
       <FieldButton
@@ -194,9 +196,9 @@ export function DurationPicker({
           setOpen(false);
         }}>
         <View style={styles.wheels}>
-          {(withHours || h > 0) && <Wheel values={hours} value={h} onChange={setH} label="h" />}
-          <Wheel values={sixty} value={m} onChange={setM} label="min" format={pad} />
-          <Wheel values={sixty} value={s} onChange={setS} label="s" format={pad} />
+          <Wheel values={hours} value={h} onChange={setH} label="heures" />
+          <Wheel values={sixty} value={m} onChange={setM} label="minutes" format={pad} />
+          <Wheel values={sixty} value={s} onChange={setS} label="secondes" format={pad} />
         </View>
       </Sheet>
     </View>
@@ -285,7 +287,7 @@ const styles = StyleSheet.create({
   grabber: { width: 40, height: 5, borderRadius: 3, alignSelf: 'center', marginBottom: Spacing.s },
   sheetTitle: { fontSize: 17, fontWeight: '700', textAlign: 'center' },
   wheels: { flexDirection: 'row', gap: Spacing.s, alignItems: 'center' },
-  wheel: { width: '100%', ...(Platform.OS === 'web' ? { height: 44, borderRadius: 10, borderWidth: 1, paddingHorizontal: 8, fontSize: 18 } : {}) },
+  wheel: { width: '100%', ...(Platform.OS === 'ios' ? { height: 190 } : {}), ...(Platform.OS === 'web' ? { height: 44, borderRadius: 10, borderWidth: 1, paddingHorizontal: 8, fontSize: 18 } : {}) },
   field: { borderRadius: 14, borderWidth: 1, paddingHorizontal: Spacing.m, paddingVertical: Spacing.s, gap: 2 },
   fieldBig: { paddingVertical: Spacing.m },
   fieldRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.s },

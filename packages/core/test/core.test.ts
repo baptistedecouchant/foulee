@@ -677,3 +677,33 @@ describe('mots encourageants', () => {
       }
   });
 });
+
+import { adaptPlanToVma, compareVma, levelFromVma, reschedulePlan, vmaFromSixMinutes, vmaTestSession } from '../src/index.ts';
+
+describe('test VMA', () => {
+  const plan = buildPlan(tenK45); // dernière perf : 10 km en 49:30
+  it('6 minutes : VMA = distance / 100', () => {
+    expect(vmaFromSixMinutes(1300)).toBe(13);
+    expect(levelFromVma(15)).toEqual({ kind: 'race', distanceKm: 10, timeSec: Math.round((10 / 13.2) * 3600) });
+  });
+  it('VMA nettement meilleure : on propose d’adapter, mêmes séances (ids) avec allures plus rapides', () => {
+    const c = compareVma(plan, 15.5);
+    expect(c.adapt).toBe(true);
+    const a = adaptPlanToVma(plan, 15.5);
+    expect(a.sessions.map((s) => s.id)).toEqual(plan.sessions.map((s) => s.id));
+    expect(a.sessions.map((s) => s.date)).toEqual(plan.sessions.map((s) => s.date));
+    const ef = (p: typeof plan) => p.sessions.find((s) => s.type === 'ef')!.steps[0] as { pace: { lo: number } };
+    expect(ef(a).pace.lo).toBeLessThan(ef(plan).pace.lo);
+  });
+  it('VMA équivalente ou moins bonne : pas d’adaptation', () => {
+    expect(compareVma(plan, 13.8).adapt).toBe(false);
+    expect(compareVma(plan, 12).adapt).toBe(false);
+  });
+  it('séance de test et décalage du début', () => {
+    const t = vmaTestSession(plan, '2026-11-03');
+    expect(t.durationSec).toBeGreaterThan(30 * 60);
+    const r = reschedulePlan(plan, '2026-11-09');
+    expect(r.sessions[0].date >= '2026-11-09').toBe(true);
+    expect(r.sessions.at(-1)!.date).toBe(plan.sessions.at(-1)!.date);
+  });
+});
