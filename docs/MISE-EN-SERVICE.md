@@ -33,7 +33,15 @@ Dans Supabase → **Authentication** :
    - **Confirm signup** : `Bienvenue sur Foulée ! Ton code de confirmation : {{ .Token }}`
    - **Reset Password** : `Ton code pour changer de mot de passe Foulée : {{ .Token }}`
 3. **URL Configuration → Redirect URLs** : ajoute `exp://**` et `foulee://**` (retour après Google ou Apple).
-4. **Emails → SMTP Settings** : branche **Resend** (host `smtp.resend.com`, port `465`, utilisateur `resend`, mot de passe = clé API Resend). Sans ça, Supabase n'envoie que 2 e-mails par heure.
+4. **Serveur d'envoi des e-mails (obligatoire pour inviter d'autres personnes)** : sans lui, Supabase n'envoie les codes qu'aux membres de ton équipe Supabase, 2 par heure, et interdit de modifier les modèles. Ajoute ces secrets dans GitHub, le déploiement configure tout (serveur, modèles en français avec le code à 6 chiffres, limite de 60 e-mails par heure) :
+
+| Secret | Resend (avec ton domaine) | Brevo (sans domaine) |
+|---|---|---|
+| `SMTP_HOST` | `smtp.resend.com` | `smtp-relay.brevo.com` |
+| `SMTP_PORT` | `465` | `587` |
+| `SMTP_USER` | `resend` | l'identifiant SMTP affiché par Brevo |
+| `SMTP_PASS` | ta clé API Resend | la clé SMTP Brevo |
+| `SMTP_SENDER` | `codes@ton-domaine.fr` | l'adresse validée dans Brevo |
 5. **Google** : **Providers → Google**, colle le *Client ID* et le *Client secret* du client OAuth « Web » créé dans Google Cloud. Dans Google Cloud, l'URL de redirection autorisée est `https://<ta référence>.supabase.co/auth/v1/callback`.
 6. **Apple** : **Providers → Apple**. Dans « Client IDs », mets `app.foulee.mobile` (connexion native sur iPhone). Pour la connexion par navigateur, crée un *Services ID* et une clé *Sign in with Apple* sur developer.apple.com.
 

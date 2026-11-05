@@ -13,7 +13,7 @@ name: Déployer le serveur
 on:
   push:
     branches: [main]
-    paths: ['supabase/**', 'packages/core/**', '.github/workflows/deploy-backend.yml']
+    paths: ['supabase/**', 'packages/core/**', 'scripts/configure-auth-email.py', '.github/workflows/deploy-backend.yml']
   workflow_dispatch:
 
 concurrency:
