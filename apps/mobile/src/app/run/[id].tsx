@@ -1,7 +1,7 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { ActivityIndicator, Animated, Linking, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ECONOMY, formatDuration, formatPace, formatTime, nutritionFor, warmupAdvice, type PlannedSession } from '@foulee/core';
 
@@ -9,7 +9,7 @@ import { Button, Chip, Ionicons, ProgressBar, Row, Txt } from '@/components/ui';
 import { Fonts, Gradients, Radius, Spacing } from '@/constants/theme';
 import { useStore, type PlanEntry } from '@/lib/store';
 import { isDemo } from '@/lib/supabase';
-import { useRunSession } from '@/lib/useRunSession';
+import { useRunSession, type GpsState } from '@/lib/useRunSession';
 
 // Écran de course : toujours sombre, gros chiffres, lisible en plein soleil et en courant.
 const C = {
@@ -53,6 +53,14 @@ function Run({ entry, session }: { entry: PlanEntry; session: PlannedSession }) 
   // La configuration (voix, simulation) est figée au démarrage.
   const runner = useRunSession(session, { simulate, voice });
   const v = runner.view;
+
+  // GPS allumé dès l'écran de préparation : le signal a le temps de se caler.
+  useEffect(() => {
+    if (started) return;
+    if (simulate) runner.release();
+    else runner.prepare();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [simulate]);
   const nutrition = nutritionFor(session, entry.plan.request.goal);
   const warmup = warmupAdvice(session);
 
@@ -93,7 +101,7 @@ function Run({ entry, session }: { entry: PlanEntry; session: PlannedSession }) 
     return (
       <View style={{ flex: 1, backgroundColor: C.bg }}>
         <Stack.Screen options={{ headerShown: false }} />
-        <ScrollView contentContainerStyle={[styles.page, { paddingTop: insets.top + Spacing.l, paddingBottom: insets.bottom + 120 }]}>
+        <ScrollView contentContainerStyle={[styles.page, { paddingTop: insets.top + Spacing.l, paddingBottom: insets.bottom + (simulate ? 120 : 230) }]}>
           <Row style={{ justifyContent: 'space-between' }}>
             <Pressable accessibilityRole="button" accessibilityLabel="Fermer" onPress={() => router.back()} style={styles.iconBtn}>
               <Ionicons name="close" size={24} color="#fff" />
@@ -167,11 +175,13 @@ function Run({ entry, session }: { entry: PlanEntry; session: PlannedSession }) 
             )}
           </Panel>
         </ScrollView>
-        <View style={[styles.bottom, { paddingBottom: insets.bottom + Spacing.l }]}>
+        <View style={[styles.bottom, { paddingBottom: insets.bottom + Spacing.l, gap: Spacing.m }]}>
+          {!simulate && <GpsBanner gps={v.gps} accuracy={v.gpsAccuracy} hint={v.message} onRetry={() => runner.prepare()} />}
           <Button
-            kind="gold"
+            kind={simulate || v.gps === 'ok' ? 'gold' : 'secondary'}
             icon="play"
-            label="Démarrer la séance"
+            disabled={!simulate && (v.gps === 'denied' || v.gps === 'unavailable')}
+            label={simulate || v.gps === 'ok' ? 'Démarrer la séance' : v.gps === 'searching' || v.gps === 'off' ? 'Démarrer sans attendre le GPS' : v.gps === 'weak' ? 'Démarrer avec un GPS faible' : 'GPS indisponible'}
             onPress={() => {
               setStarted(true);
               runner.start();
@@ -192,7 +202,7 @@ function Run({ entry, session }: { entry: PlanEntry; session: PlannedSession }) 
         ) : (
           <Text style={styles.countdown}>{v.countdown ?? 5}</Text>
         )}
-        <Txt color="rgba(255,255,255,0.85)">{v.gps === 'searching' ? 'Recherche du GPS…' : 'Prépare-toi…'}</Txt>
+        <Txt color="rgba(255,255,255,0.85)">{simulate ? 'Prépare-toi…' : v.gps === 'ok' ? 'GPS prêt ✓ Prépare-toi…' : 'Recherche du signal GPS…'}</Txt>
       </LinearGradient>
     );
   }
@@ -262,9 +272,21 @@ function Run({ entry, session }: { entry: PlanEntry; session: PlannedSession }) 
           <Chip tone="glass" label={`Bloc ${v.stepIndex + 1}/${v.stepCount}`} />
           <Row>
             {v.phase === 'paused' && <Chip tone="flame" icon="pause" label="Pause" />}
-            <Chip tone={v.gps === 'ok' ? 'xp' : 'warn'} icon="navigate" label={simulate ? 'Simulation' : v.gps === 'ok' ? 'GPS' : 'GPS faible'} />
+            <Chip
+              tone={simulate || v.gps === 'ok' ? 'xp' : v.gps === 'lost' ? 'flame' : 'warn'}
+              icon="navigate"
+              label={simulate ? 'Simulation' : v.gps === 'ok' ? 'GPS' : v.gps === 'lost' ? 'GPS perdu' : v.gps === 'weak' ? 'GPS faible' : 'GPS…'}
+            />
           </Row>
         </Row>
+        {!simulate && (v.gps === 'lost' || v.gps === 'searching') && (
+          <View style={[styles.gpsAlert, { backgroundColor: v.gps === 'lost' ? 'rgba(255,130,71,0.18)' : 'rgba(255,203,71,0.15)' }]}>
+            <ActivityIndicator color={v.gps === 'lost' ? C.fast : C.gold} />
+            <Txt variant="caption" color="#fff" style={{ flex: 1 }}>
+              {v.gps === 'lost' ? 'Signal GPS perdu : la distance est en pause. Reste à découvert, elle reprendra dès son retour.' : 'Recherche du signal GPS… La distance commencera dès qu’il sera trouvé.'}
+            </Txt>
+          </View>
+        )}
         <View style={{ gap: 2 }}>
           <Txt variant="display" color="#fff" numberOfLines={1}>
             {s ? (s.rep ? `${s.label} ${s.rep.n}/${s.rep.of}` : s.label) : ''}
@@ -442,7 +464,72 @@ function RoundBtn({ icon, label, onPress, big }: { icon: 'close' | 'play' | 'pau
   );
 }
 
+/** État du GPS avant le départ : en recherche, trouvé, faible, refusé. */
+function GpsBanner({ gps, accuracy, hint, onRetry }: { gps: GpsState; accuracy: number | null; hint: string | null; onRetry: () => void }) {
+  const acc = accuracy != null ? ` · précision ${Math.round(accuracy)} m` : '';
+  if (gps === 'ok') {
+    return (
+      <View style={[styles.gpsBanner, { backgroundColor: '#0E2A22', borderColor: 'rgba(59,224,160,0.5)' }]}>
+        <Ionicons name="checkmark-circle" size={22} color={C.ok} />
+        <View style={{ flex: 1 }}>
+          <Txt style={{ fontWeight: '700' }} color="#fff">
+            Signal GPS trouvé
+          </Txt>
+          <Txt variant="caption" color={C.muted}>
+            Tu peux partir{acc}
+          </Txt>
+        </View>
+      </View>
+    );
+  }
+  if (gps === 'denied' || gps === 'unavailable') {
+    return (
+      <View style={[styles.gpsBanner, { backgroundColor: '#2E1A12', borderColor: 'rgba(255,130,71,0.5)' }]}>
+        <Ionicons name="location" size={22} color={C.fast} />
+        <View style={{ flex: 1, gap: 2 }}>
+          <Txt style={{ fontWeight: '700' }} color="#fff">
+            {gps === 'denied' ? 'Foulée n’a pas accès à ta position' : 'La localisation est désactivée'}
+          </Txt>
+          <Txt variant="caption" color={C.muted}>
+            {gps === 'denied'
+              ? 'Réglages → Foulée (ou Expo Go) → Position → « Lorsque l’app est active ».'
+              : 'Réglages → Confidentialité et sécurité → Service de localisation.'}
+          </Txt>
+          <Row style={{ gap: Spacing.l, marginTop: 4 }}>
+            <Pressable accessibilityRole="button" onPress={() => Linking.openSettings().catch(() => {})}>
+              <Txt variant="caption" color={C.gold} style={{ fontWeight: '700' }}>
+                Ouvrir les réglages
+              </Txt>
+            </Pressable>
+            <Pressable accessibilityRole="button" onPress={onRetry}>
+              <Txt variant="caption" color={C.gold} style={{ fontWeight: '700' }}>
+                Réessayer
+              </Txt>
+            </Pressable>
+          </Row>
+        </View>
+      </View>
+    );
+  }
+  return (
+    <View style={[styles.gpsBanner, { backgroundColor: '#2A2410', borderColor: 'rgba(255,203,71,0.45)' }]}>
+      <ActivityIndicator color={C.gold} />
+      <View style={{ flex: 1 }}>
+        <Txt style={{ fontWeight: '700' }} color="#fff">
+          {gps === 'weak' ? 'Signal GPS encore imprécis' : 'Recherche du signal GPS…'}
+        </Txt>
+        <Txt variant="caption" color={C.muted}>
+          {hint ?? 'Reste à découvert quelques secondes'}
+          {acc}
+        </Txt>
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  gpsBanner: { flexDirection: 'row', alignItems: 'center', gap: Spacing.m, borderRadius: Radius.m, borderWidth: 1, padding: Spacing.m },
+  gpsAlert: { flexDirection: 'row', alignItems: 'center', gap: Spacing.s, borderRadius: Radius.m, padding: Spacing.m },
   page: { paddingHorizontal: Spacing.l, gap: Spacing.l },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: Spacing.l },
   countdown: { color: '#fff', fontSize: 180, fontWeight: '900', fontFamily: Fonts.rounded, fontVariant: ['tabular-nums'] },

@@ -1,7 +1,7 @@
 import * as Clipboard from 'expo-clipboard';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, Share, StyleSheet, TextInput, View } from 'react-native';
 import { CHALLENGES } from '@foulee/core';
 
 import { Avatar, ChallengeCard, FriendGoalRow } from '@/components/social';
@@ -108,6 +108,19 @@ export default function HubScreen() {
           </View>
           <Chip tone="glass" icon={copied ? 'checkmark' : 'copy'} label={copied ? 'Copié' : 'Copier'} />
         </Pressable>
+        {o.me.friendCode ? (
+          <Button
+            kind="secondary"
+            small
+            icon="share-outline"
+            label="Envoyer mon code à un ami"
+            onPress={() =>
+              Share.share({
+                message: `On s’entraîne ensemble sur Foulée ? Ajoute-moi dans le Hub avec mon code ami : ${o.me.friendCode}`,
+              }).catch(() => {})
+            }
+          />
+        ) : null}
       </GradientCard>
 
       {/* ---------- Ajouter un ami ---------- */}

@@ -9,6 +9,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { haversine, LiveWorkout, type Activity, type LiveEvent, type LiveStep, type PaceStatus, type PlannedSession, type TrackPoint } from '@foulee/core';
 
 export type RunPhase = 'ready' | 'countdown' | 'running' | 'paused' | 'done';
+/** off : pas lancé · searching : en recherche · ok : signal bon · weak : imprécis · lost : plus de point depuis 10 s · denied : refusé · unavailable : localisation coupée */
+export type GpsState = 'off' | 'searching' | 'ok' | 'weak' | 'lost' | 'denied' | 'unavailable';
 
 export interface RunView {
   phase: RunPhase;
@@ -27,12 +29,18 @@ export interface RunView {
   remainingM?: number;
   stepPace: number | null;
   paceStatus: PaceStatus;
-  gps: 'off' | 'searching' | 'ok' | 'weak' | 'denied';
+  gps: GpsState;
+  /** Précision du dernier point GPS, en mètres. */
+  gpsAccuracy: number | null;
   message: string | null;
 }
 
 /** Points GPS au-delà de cette précision : enregistrés pour le serveur, ignorés pour la distance. */
 const MAX_ACCURACY_M = 30;
+/** Précision suffisante pour annoncer « GPS prêt » avant le départ. */
+const READY_ACCURACY_M = 20;
+/** Sans nouveau point depuis ce délai : signal perdu. */
+const LOST_AFTER_MS = 10_000;
 /** Saut impossible à pied entre deux points : ignoré pour la distance (perte de signal). */
 const MAX_SPEED_MS = 12;
 const PACE_WINDOW_SEC = 20;
@@ -52,6 +60,7 @@ export function useRunSession(session: PlannedSession, opts: { simulate: boolean
     stepPace: null,
     paceStatus: 'unknown',
     gps: 'off',
+    gpsAccuracy: null,
     message: null,
   }));
 
@@ -68,9 +77,13 @@ export function useRunSession(session: PlannedSession, opts: { simulate: boolean
     simHeading: 0,
     simFactor: 1,
     simPos: { lat: 48.8566, lon: 2.3522 },
-    gps: 'off' as RunView['gps'],
+    gps: 'off' as GpsState,
+    accuracy: null as number | null,
+    lastFixAt: 0,
     message: null as string | null,
   });
+  const simRef = useRef(opts.simulate);
+  simRef.current = opts.simulate;
   const watcher = useRef<Location.LocationSubscription | null>(null);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -141,20 +154,52 @@ export function useRunSession(session: PlannedSession, opts: { simulate: boolean
       stepPace: w.stepAvgPace({ elapsedSec: s.elapsed, distanceM: s.distance }),
       paceStatus: w.paceStatus,
       gps: s.gps,
+      gpsAccuracy: s.accuracy,
       message: s.message,
     });
   }, []);
 
+  /** Met à jour l'état du signal ; annonce les changements importants (voix + vibration). */
+  const setGps = useCallback(
+    (next: GpsState) => {
+      const s = r.current;
+      const prev = s.gps;
+      if (prev === next) return;
+      s.gps = next;
+      const running = s.phase === 'running' || s.phase === 'paused';
+      if (next === 'ok' && (prev === 'searching' || prev === 'off')) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+        if (opts.voice && s.phase === 'ready') Speech.speak('Signal GPS trouvé.', { language: 'fr-FR' });
+      } else if (next === 'ok' && prev === 'lost' && running) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+        say('Signal GPS retrouvé.', true);
+      } else if (next === 'lost' && running) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+        say('Signal GPS perdu. Reste à découvert, la distance reprendra dès son retour.', true);
+      }
+      if (s.phase === 'ready' || s.phase === 'countdown') setView((v) => ({ ...v, gps: next, gpsAccuracy: s.accuracy }));
+    },
+    [opts.voice, say],
+  );
+
   /** Nouveau point GPS (réel ou simulé). */
   const onPoint = useCallback((p: TrackPoint) => {
     const s = r.current;
+    s.lastFixAt = Date.now();
+    s.accuracy = p.accuracy ?? null;
+    const readyThreshold = s.phase === 'ready' || s.phase === 'countdown' ? READY_ACCURACY_M : MAX_ACCURACY_M;
+    const good = p.accuracy == null || p.accuracy <= readyThreshold;
+    // Avant le départ : on attend un point précis ; ensuite, un point imprécis = signal faible.
+    setGps(good ? 'ok' : s.gps === 'searching' ? 'searching' : 'weak');
+    if (s.phase === 'ready' || s.phase === 'countdown') {
+      setView((v) => ({ ...v, gpsAccuracy: s.accuracy }));
+      return;
+    }
     if (s.phase !== 'running') {
       s.lastGood = null; // pas de distance pendant la pause
       return;
     }
     s.track.push(p);
-    const good = p.accuracy == null || p.accuracy <= MAX_ACCURACY_M;
-    s.gps = good ? 'ok' : 'weak';
     if (!good) return;
     if (s.lastGood) {
       const d = haversine(s.lastGood, p);
@@ -162,13 +207,19 @@ export function useRunSession(session: PlannedSession, opts: { simulate: boolean
       if (dt > 0 && d / dt <= MAX_SPEED_MS) s.distance += d;
     }
     s.lastGood = p;
-  }, []);
+  }, [setGps]);
+
+  // Le GPS appelle toujours la version à jour de onPoint.
+  const onPointRef = useRef(onPoint);
+  onPointRef.current = onPoint;
 
   /** Battement : 1 s réelle (ou virtuelle en simulation). */
   const tick = useCallback(() => {
     const s = r.current;
     if (s.phase !== 'running') return;
     s.elapsed += 1;
+    // Plus aucun point depuis 10 s : signal perdu.
+    if (!opts.simulate && s.lastFixAt && Date.now() - s.lastFixAt > LOST_AFTER_MS) setGps('lost');
 
     if (opts.simulate) {
       s.simClock += 1000;
@@ -193,7 +244,50 @@ export function useRunSession(session: PlannedSession, opts: { simulate: boolean
 
     handleEvents(engine.current.update({ elapsedSec: s.elapsed, distanceM: s.distance, paceSecPerKm: pace(), now: now() }));
     render();
-  }, [opts.simulate, onPoint, handleEvents, render]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [opts.simulate, onPoint, handleEvents, render, setGps]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /**
+   * Allume le GPS dès l'ouverture de l'écran, pour que le signal soit calé avant le départ.
+   * Sans effet en simulation. Peut être rappelé (bouton « Réessayer »).
+   */
+  const prepare = useCallback(async () => {
+    const s = r.current;
+    if (simRef.current || watcher.current) return;
+    try {
+      const services = await Location.hasServicesEnabledAsync();
+      if (!services) {
+        setGps('unavailable');
+        return;
+      }
+      const perm = await Location.requestForegroundPermissionsAsync();
+      if (perm.status !== 'granted') {
+        setGps('denied');
+        return;
+      }
+      setGps('searching');
+      watcher.current = await Location.watchPositionAsync(
+        { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 1000, distanceInterval: 0 },
+        (loc) => {
+          if (simRef.current) return; // simulation activée entre-temps : on ignore le vrai GPS
+          onPointRef.current({
+            t: loc.timestamp,
+            lat: loc.coords.latitude,
+            lon: loc.coords.longitude,
+            alt: loc.coords.altitude ?? undefined,
+            accuracy: loc.coords.accuracy ?? undefined,
+            // Position falsifiée par une app (Android) : transmise au serveur, qui refusera la séance.
+            mocked: loc.mocked || undefined,
+          });
+        },
+      );
+      // Toujours en recherche après 20 s : on le dit clairement.
+      setTimeout(() => {
+        if (s.gps === 'searching') setView((v) => ({ ...v, message: 'Le signal met du temps : va à découvert, loin des immeubles.' }));
+      }, 20_000);
+    } catch {
+      setGps('unavailable');
+    }
+  }, [setGps]);
 
   // Nettoyage
   useEffect(
@@ -210,28 +304,13 @@ export function useRunSession(session: PlannedSession, opts: { simulate: boolean
   const start = useCallback(async () => {
     const s = r.current;
     if (!opts.simulate) {
-      const perm = await Location.requestForegroundPermissionsAsync();
-      if (perm.status !== 'granted') {
-        s.gps = 'denied';
+      await prepare();
+      if (s.gps === 'denied' || s.gps === 'unavailable') {
         render();
         return;
       }
-      s.gps = 'searching';
-      watcher.current = await Location.watchPositionAsync(
-        { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 1000, distanceInterval: 0 },
-        (loc) =>
-          onPoint({
-            t: loc.timestamp,
-            lat: loc.coords.latitude,
-            lon: loc.coords.longitude,
-            alt: loc.coords.altitude ?? undefined,
-            accuracy: loc.coords.accuracy ?? undefined,
-            // Position falsifiée par une app (Android) : transmise au serveur, qui refusera la séance.
-            mocked: loc.mocked || undefined,
-          }),
-      );
     } else {
-      s.gps = 'ok';
+      setGps('ok');
       s.simClock = Date.now();
     }
     activateKeepAwakeAsync('run').catch(() => {});
@@ -252,7 +331,7 @@ export function useRunSession(session: PlannedSession, opts: { simulate: boolean
     handleEvents(engine.current.start(s.startedAt));
     timer.current = setInterval(tick, opts.simulate ? 200 : 1000);
     render();
-  }, [opts.simulate, opts.voice, onPoint, handleEvents, tick, render]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [opts.simulate, opts.voice, prepare, handleEvents, tick, render, setGps]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pause = useCallback(() => {
     r.current.phase = 'paused';
@@ -273,6 +352,15 @@ export function useRunSession(session: PlannedSession, opts: { simulate: boolean
     handleEvents(engine.current.skip({ elapsedSec: s.elapsed, distanceM: s.distance, paceSecPerKm: pace(), now: now() }));
     render();
   }, [handleEvents, render]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Coupe le GPS (ex. quand on active la simulation). */
+  const release = useCallback(() => {
+    watcher.current?.remove();
+    watcher.current = null;
+    r.current.gps = 'off';
+    r.current.accuracy = null;
+    setView((v) => ({ ...v, gps: 'off', gpsAccuracy: null, message: null }));
+  }, []);
 
   const stopAll = () => {
     if (timer.current) clearInterval(timer.current);
@@ -318,5 +406,5 @@ export function useRunSession(session: PlannedSession, opts: { simulate: boolean
     r.current.simFactor = f;
   }, []);
 
-  return { view, steps: engine.current.steps, start, pause, resume, skip, finish, cancel, setSimFactor };
+  return { view, steps: engine.current.steps, prepare, release, start, pause, resume, skip, finish, cancel, setSimFactor };
 }
