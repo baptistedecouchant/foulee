@@ -41,6 +41,17 @@ jobs:
           print('Adresses de retour autorisées :', ', '.join(u for u in allow if u.startswith(('exp:', 'foulee:'))) or 'AUCUNE (exp://** et foulee://** manquent)')
           "
 
+      - name: Stockage des photos
+        env:
+          REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          q() { curl -sS -X POST "https://api.supabase.com/v1/projects/$REF/database/query" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d "{\"query\": \"$1\"}"; echo; }
+          echo "Espace « media » :"; q "select id, public, file_size_limit, allowed_mime_types from storage.buckets where id = 'media'"
+          echo "Règles d'accès :"; q "select policyname, cmd from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname like 'media%'"
+          echo "Photos déjà envoyées :"; q "select count(*) from storage.objects where bucket_id = 'media'"
+          echo "Profils avec photo :"; q "select count(*) from public.profiles where avatar_url is not null"
+
       - name: Redirection vers Google
         env:
           REF: ${{ secrets.SUPABASE_PROJECT_REF }}

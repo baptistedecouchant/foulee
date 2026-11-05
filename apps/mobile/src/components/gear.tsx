@@ -47,8 +47,8 @@ export function ShoePhoto({ shoe, onChange, height = 170 }: { shoe: { id: string
     setBusy(true);
     try {
       onChange?.(await uploadPhoto(local, `shoe-${shoe.id}`));
-    } catch {
-      setError('La photo n’a pas pu être enregistrée.');
+    } catch (e) {
+      setError(`La photo n’a pas pu être enregistrée (${String((e as Error)?.message ?? e).slice(0, 80)}).`);
     } finally {
       setBusy(false);
     }

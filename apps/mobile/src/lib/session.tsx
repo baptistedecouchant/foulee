@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { loadProfile, profileComplete, type Profile } from '@/lib/auth';
 import { importProviderAvatar } from '@/lib/media';
@@ -19,16 +19,35 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<SessionStatus>(isDemo ? 'demo' : 'loading');
   const [profile, setProfile] = useState<Profile | null>(null);
 
+  // Dernier état sûr : une erreur passagère (réseau) ne doit jamais renvoyer vers l'écran de connexion,
+  // car cela démonte toute la navigation (et l'écran en cours repartirait de zéro).
+  const known = useRef<{ userId: string; profile: Profile } | null>(null);
+
   const reload = useCallback(async () => {
     if (!supabase) return;
-    const { data } = await supabase.auth.getSession().catch(() => ({ data: { session: null } }));
+    let session;
+    try {
+      const { data, error } = await supabase.auth.getSession();
+      if (error) throw error;
+      session = data.session;
+    } catch {
+      return; // on garde l'état actuel
+    }
     // Les anciennes sessions invitées (versions précédentes) doivent maintenant créer un vrai compte.
-    if (!data.session || data.session.user.is_anonymous) {
+    if (!session || session.user.is_anonymous) {
+      known.current = null;
       setProfile(null);
       setStatus('signedOut');
       return;
     }
-    const p = await loadProfile().catch(() => null);
+    let p: Profile | null;
+    try {
+      p = await loadProfile();
+    } catch {
+      if (known.current?.userId === session.user.id) return; // profil déjà connu : on ne change rien
+      p = null;
+    }
+    if (p) known.current = { userId: session.user.id, profile: p };
     setProfile(p);
     setStatus(profileComplete(p) ? 'ready' : 'incomplete');
     // Première connexion avec Google : on reprend sa photo de profil.
@@ -42,7 +61,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!supabase) return;
     reload();
-    const { data } = supabase.auth.onAuthStateChange((event) => {
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {
+      // « SIGNED_IN » est aussi émis quand la session est simplement rafraîchie : on ne recharge
+      // que si l'utilisateur a vraiment changé.
+      if (event === 'SIGNED_IN' && session && known.current?.userId === session.user.id) return;
       if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'USER_UPDATED') reload();
     });
     return () => data.subscription.unsubscribe();

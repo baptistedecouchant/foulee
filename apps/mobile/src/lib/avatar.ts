@@ -23,13 +23,14 @@ export function useMyAvatar() {
     if (!local) return;
     setBusy(true);
     try {
-      if (isDemo) setLocalAvatar(local);
+      if (isDemo) setLocalAvatar(local.uri);
       else {
         await saveAvatarUrl(await uploadPhoto(local, 'avatar'));
         await reload();
       }
     } catch (e) {
-      setError(String((e as Error)?.message) === 'too_big' ? 'Photo trop lourde (5 Mo maximum).' : 'La photo n’a pas pu être enregistrée. Réessaie.');
+      const m = String((e as Error)?.message ?? e);
+      setError(m === 'too_big' ? 'Photo trop lourde (5 Mo maximum).' : `La photo n’a pas pu être enregistrée (${m.slice(0, 80)}). Réessaie.`);
     } finally {
       setBusy(false);
     }

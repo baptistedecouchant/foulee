@@ -205,13 +205,13 @@ export async function signInWithProvider(provider: Provider): Promise<'ok' | 'ca
 
 export async function loadProfile(): Promise<Profile | null> {
   if (!supabase) return null;
-  const { data: u } = await supabase.auth.getUser();
+  // Session locale (pas d'appel réseau) : une coupure ne doit pas faire croire à une déconnexion.
+  const { data: sess } = await supabase.auth.getSession();
+  const u = { user: sess.session?.user ?? null };
   if (!u.user) return null;
-  const { data: p } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', u.user.id)
-    .maybeSingle();
+  const { data: p, error } = await supabase.from('profiles').select('*').eq('id', u.user.id).maybeSingle();
+  // Erreur réseau ou serveur : on le signale (l'appelant garde le profil déjà connu).
+  if (error) throw error;
   return {
     firstName: p?.first_name ?? null,
     lastName: p?.last_name ?? null,
