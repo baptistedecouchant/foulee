@@ -142,6 +142,21 @@ export async function nativeAppleAvailable(): Promise<boolean> {
   return AppleAuthentication.isAvailableAsync().catch(() => false);
 }
 
+/** Le fournisseur (Google, Apple) est-il activé dans Supabase ? En cas de doute (hors ligne), on tente. */
+export async function providerEnabled(provider: Provider): Promise<boolean> {
+  const url = process.env.EXPO_PUBLIC_SUPABASE_URL;
+  const key = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !key) return false;
+  try {
+    const res = await fetch(`${url}/auth/v1/settings`, { headers: { apikey: key } });
+    if (!res.ok) return true;
+    const d = (await res.json()) as { external?: Record<string, boolean> };
+    return d.external?.[provider] !== false;
+  } catch {
+    return true;
+  }
+}
+
 export async function signInWithProvider(provider: Provider): Promise<'ok' | 'cancelled'> {
   const sb = client();
 
@@ -167,6 +182,9 @@ export async function signInWithProvider(provider: Provider): Promise<'ok' | 'ca
     }
     return 'ok';
   }
+
+  // Méthode pas encore activée côté serveur : on le dit tout de suite, au lieu d'ouvrir une page d'erreur 400.
+  if (!(await providerEnabled(provider))) throw new Error('provider is not enabled');
 
   const redirectTo = redirectUrl();
   const { data, error } = await sb.auth.signInWithOAuth({ provider, options: { redirectTo, skipBrowserRedirect: true } });
@@ -264,7 +282,7 @@ export function authErrorMessage(e: unknown): string {
   if (/rate limit|too many|security purposes/i.test(msg)) return 'Trop de tentatives. Attends quelques minutes avant de réessayer.';
   if (/weak|password should/i.test(msg)) return 'Mot de passe trop faible : 8 caractères minimum, avec lettres et chiffres.';
   if (/invalid_birth_date/i.test(msg)) return `Foulée est accessible à partir de ${MIN_AGE} ans.`;
-  if (/provider is not enabled|unsupported provider|validation_failed/i.test(msg)) return 'Cette méthode de connexion n’est pas encore activée. Utilise l’e-mail pour l’instant.';
+  if (/provider is not enabled|unsupported provider|validation_failed/i.test(msg)) return 'Cette méthode de connexion n’est pas encore activée sur le serveur. Utilise ton e-mail pour l’instant.';
   if (/network|fetch/i.test(msg)) return 'Pas de connexion internet.';
   return 'La connexion a échoué. Réessaie dans un instant.';
 }
