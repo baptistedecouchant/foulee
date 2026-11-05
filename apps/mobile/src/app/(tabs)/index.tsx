@@ -75,6 +75,7 @@ export default function HomeScreen() {
     goalBar
       ? {
           key: 'goal',
+          colors: ['#3A4BFF', '#7B3FF2'] as const,
           onPress: () => router.push({ pathname: '/plan/[id]', params: { id: goalBar.id } }),
           content: (
             <>
@@ -98,6 +99,7 @@ export default function HomeScreen() {
         }
       : {
           key: 'goal',
+          colors: ['#3A4BFF', '#7B3FF2'] as const,
           onPress: () => router.push('/goal'),
           content: (
             <>
@@ -113,10 +115,34 @@ export default function HomeScreen() {
             </>
           ),
         },
+    {
+      key: 'tip',
+      colors: ['#F29F05', '#E8590C'] as const,
+      onPress: tipRead ? undefined : readTip,
+      content: (
+        <>
+          <Row style={{ justifyContent: 'space-between' }}>
+            <Txt variant="label" color={M}>
+              💡 Astuce · {tip.category}
+            </Txt>
+            <Txt variant="caption" color={W} style={{ fontWeight: '700' }}>
+              {tipRead ? `✓ +${LOGIN_XP.tip} XP` : `+${LOGIN_XP.tip} XP`}
+            </Txt>
+          </Row>
+          <Txt style={styles.pageTitle} color={W} numberOfLines={1}>
+            {tip.title}
+          </Txt>
+          <Txt variant="caption" color={W} numberOfLines={3}>
+            {tip.text}
+          </Txt>
+        </>
+      ),
+    },
     ...(phase
       ? [
           {
             key: 'phase',
+            colors: ['#0E8F86', '#1E5FD8'] as const,
             onPress: () => router.push({ pathname: '/plan/[id]', params: { id: goalBar!.id } }),
             content: (
               <>
@@ -141,6 +167,7 @@ export default function HomeScreen() {
       : []),
     {
       key: 'player',
+      colors: ['#6A2BD9', '#C2338C'] as const,
       onPress: () => router.push('/profile'),
       content: (
         <>
@@ -163,6 +190,7 @@ export default function HomeScreen() {
     },
     {
       key: 'steps',
+      colors: ['#12A06A', '#0E7C9E'] as const,
       onPress: () => health !== 'connected' && router.push('/devices'),
       content: (
         <>
@@ -183,6 +211,7 @@ export default function HomeScreen() {
     },
     {
       key: 'streak',
+      colors: ['#FF6A2B', '#E0306B'] as const,
       content: (
         <>
           <Row style={{ justifyContent: 'space-between' }}>
@@ -227,32 +256,8 @@ export default function HomeScreen() {
         <LevelBadge level={level.level} size={48} />
       </Row>
 
-      {/* ---------- Raccourcis ---------- */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -Spacing.l }} contentContainerStyle={{ gap: Spacing.s, paddingHorizontal: Spacing.l }}>
-        {shortcuts.map((c) => (
-          <Pressable
-            key={c.label}
-            accessibilityRole="button"
-            onPress={c.onPress}
-            style={({ pressed }) => [styles.shortcut, { backgroundColor: t.surface, borderColor: t.line, opacity: pressed ? 0.7 : 1 }]}>
-            <Txt style={{ fontWeight: '600' }}>{c.label}</Txt>
-          </Pressable>
-        ))}
-      </ScrollView>
-
       {/* ---------- Modules qui défilent (Liquid Glass) ---------- */}
-      <HomePager image={goalPlan?.image ?? 'road'} pages={pages} />
-
-      {/* ---------- Astuce du jour ---------- */}
-      <Card>
-        <Row style={{ justifyContent: 'space-between' }}>
-          <Chip tone="accent" icon="bulb" label={`💡 Astuce du jour · ${tip.category}`} />
-          {tipRead ? <Chip tone="ok" icon="checkmark" label={`+${LOGIN_XP.tip} XP`} /> : null}
-        </Row>
-        <Txt style={{ fontWeight: '800' }}>{tip.title}</Txt>
-        <Txt muted>{tip.text}</Txt>
-        {!tipRead && <Button kind="secondary" small icon="checkmark" label={`J’ai lu (+${LOGIN_XP.tip} XP)`} onPress={readTip} />}
-      </Card>
+      <HomePager pages={pages} />
 
       {/* ---------- Semaine de course ---------- */}
       {raceSoon && (

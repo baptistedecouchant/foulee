@@ -46,17 +46,17 @@ export function PhotoCard({
 /**
  * Panneau « verre » : Liquid Glass natif sur iOS 26+, flou classique ailleurs.
  */
-export function Glass({ children, style, tint, dark }: { children: ReactNode; style?: StyleProp<ViewStyle>; tint?: string; dark?: boolean }) {
+export function Glass({ children, style, tint, dark, clear }: { children: ReactNode; style?: StyleProp<ViewStyle>; tint?: string; dark?: boolean; clear?: boolean }) {
   const scheme = useColorScheme();
   if (Platform.OS === 'ios' && isLiquidGlassAvailable()) {
     return (
-      <GlassView glassEffectStyle="regular" tintColor={tint ?? (dark ? 'rgba(8,12,28,0.35)' : undefined)} isInteractive style={[styles.glass, style]}>
+      <GlassView glassEffectStyle="regular" tintColor={tint ?? (dark ? 'rgba(8,12,28,0.35)' : clear ? 'rgba(255,255,255,0.08)' : undefined)} isInteractive style={[styles.glass, style]}>
         {children}
       </GlassView>
     );
   }
   return (
-    <BlurView intensity={40} tint={dark || scheme === 'dark' ? 'dark' : 'light'} style={[styles.glass, styles.blurFallback, dark && { backgroundColor: 'rgba(8,12,28,0.35)' }, style]}>
+    <BlurView intensity={clear ? 20 : 40} tint={clear ? 'default' : dark || scheme === 'dark' ? 'dark' : 'light'} style={[styles.glass, styles.blurFallback, dark && { backgroundColor: 'rgba(8,12,28,0.35)' }, clear && { backgroundColor: 'rgba(255,255,255,0.14)', borderColor: 'rgba(255,255,255,0.3)' }, style]}>
       {children}
     </BlurView>
   );
