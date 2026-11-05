@@ -216,7 +216,8 @@ interface Store extends PersistedState {
   dismissCelebration(): void;
   getPlan(id: string): PlanEntry | undefined;
   createPlan(req: PlanRequest): Promise<string>;
-  removePlan(id: string): void;
+  /** Supprime un entraînement. Renvoie false si le serveur a refusé (le plan est remis). */
+  removePlan(id: string): Promise<boolean>;
   setEnrichment(planId: string, e: Enrichment): void;
   setConnection(p: Provider, on: boolean): void;
   setLocalAthlete(a: Athlete): void;
@@ -628,9 +629,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     dismissCelebration: () => setCelebration(null),
     getPlan: (id) => state.plans.find((p) => p.id === id),
     createPlan,
-    removePlan: (id) => {
-      if (supabase) supabase.from('plans').update({ status: 'abandoned' }).eq('id', id).then(() => refresh());
+    removePlan: async (id) => {
+      // En ligne : le serveur confirme d'abord, puis le plan disparaît de l'écran.
+      if (supabase) {
+        const { error } = await supabase.rpc('abandon_plan', { p_plan: id });
+        if (error && !/plan_not_found/.test(error.message)) return false;
+      }
       setState((s) => ({ ...s, plans: s.plans.filter((p) => p.id !== id) }));
+      if (supabase) refresh().catch(() => {});
+      return true;
     },
     setEnrichment: (planId, e) => updatePlan(planId, (p) => ({ ...p, enrichment: e })),
     setLocalAthlete: (a) => setState((s) => ({ ...s, athlete: a })),

@@ -5,6 +5,7 @@ import { BADGE_XP, BADGES, daysBetween, formatTime, LEVEL_TITLES, LOGIN_XP, xpFo
 
 import { Button, Card, Chip, Ionicons, LevelBadge, ProgressBar, Row, SectionTitle, Txt, type IconName } from '@/components/ui';
 import { WearBar } from '@/components/gear';
+import { ShoeArt } from '@/components/shoe-art';
 import { GradientCard } from '@/components/visuals';
 import { Gradients, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -192,6 +193,7 @@ export default function ProfileScreen() {
           {mainShoe ? (
             <>
               <Row style={{ justifyContent: 'space-between' }}>
+                <ShoeArt brand={mainShoe.shoe.brand} model={mainShoe.shoe.model} color={mainShoe.shoe.color} width={96} />
                 <View style={{ flex: 1 }}>
                   <Txt variant="caption" muted>
                     {mainShoe.isDefault ? 'Paire par défaut' : 'Paire'} · {mainShoe.shoe.brand}

@@ -81,6 +81,8 @@ export interface Shoe {
   /** Surnom facultatif (« mes rouges »). */
   nickname?: string;
   lifeKm: number;
+  /** Coloris choisi (identifiant de l'illustration). */
+  color?: string;
   /** Kilomètres déjà faits avant l'ajout dans l'app. */
   startKm: number;
   /** Date d'ajout (AAAA-MM-JJ) : les courses à partir de ce jour peuvent lui être attribuées. */
@@ -132,4 +134,8 @@ export function assignRuns(runs: RunLog[], assignments: Record<string, string>, 
     changed = true;
   }
   return changed ? out : assignments;
+}
+
+export function categoryOf(brand: string, model: string): ShoeCategory {
+  return SHOE_CATALOG.find((m) => m.brand === brand && m.model === model)?.category ?? 'quotidien';
 }

@@ -20,6 +20,8 @@ export default function PlanScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { getPlan, removePlan, setEnrichment } = useStore();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [enriching, setEnriching] = useState(false);
   const [showRaceWeek, setShowRaceWeek] = useState(false);
   const { athlete } = useAthlete();
@@ -145,6 +147,7 @@ export default function PlanScreen() {
         <Card>
           <Txt style={{ fontWeight: '700' }}>Supprimer cet entraînement ?</Txt>
           <Txt muted>Les points déjà gagnés restent acquis.</Txt>
+          {deleteError && <Txt color={t.bad}>{deleteError}</Txt>}
           <Row>
             <View style={{ flex: 1 }}>
               <Button kind="secondary" label="Annuler" onPress={() => setConfirmDelete(false)} />
@@ -152,10 +155,19 @@ export default function PlanScreen() {
             <View style={{ flex: 1 }}>
               <Button
                 kind="flame"
-                label="Supprimer"
-                onPress={() => {
-                  removePlan(entry.id);
-                  router.back();
+                label={deleting ? 'Suppression…' : 'Supprimer'}
+                disabled={deleting}
+                onPress={async () => {
+                  setDeleting(true);
+                  setDeleteError(null);
+                  const ok = await removePlan(entry.id);
+                  setDeleting(false);
+                  if (!ok) {
+                    setDeleteError('La suppression a échoué. Vérifie ta connexion et réessaie.');
+                    return;
+                  }
+                  if (router.canGoBack()) router.back();
+                  else router.replace('/plans');
                 }}
               />
             </View>

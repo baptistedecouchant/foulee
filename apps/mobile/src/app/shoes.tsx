@@ -3,6 +3,7 @@ import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text
 import { DEFAULT_LIFE_KM, SHOE_BRANDS, SHOE_CATALOG, SHOE_CATEGORY_LABEL, type ShoeModel } from '@foulee/core';
 
 import { WearBar } from '@/components/gear';
+import { COLORWAYS, defaultColorway, ShoeArt } from '@/components/shoe-art';
 import { Button, Ionicons, Txt } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -31,6 +32,20 @@ export default function ShoesScreen() {
 
         {active.map(({ shoe, wear, isDefault }) => (
           <View key={shoe.id} style={[styles.card, styles.shadow, { backgroundColor: t.surface }]}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Changer le coloris"
+              onPress={() => {
+                const cur = shoe.color ?? defaultColorway(shoe.brand, shoe.model);
+                const i = COLORWAYS.findIndex((c) => c.id === cur);
+                updateShoe(shoe.id, { color: COLORWAYS[(i + 1) % COLORWAYS.length].id });
+              }}
+              style={[styles.artBox, { backgroundColor: t.surfaceAlt }]}>
+              <ShoeArt brand={shoe.brand} model={shoe.model} color={shoe.color} width={220} />
+              <Txt variant="caption" muted>
+                Touche pour changer le coloris
+              </Txt>
+            </Pressable>
             <View style={styles.rowBetween}>
               <View style={{ flex: 1 }}>
                 <Txt variant="caption" muted>
@@ -92,6 +107,7 @@ export default function ShoesScreen() {
             {retired.map(({ shoe, wear }) => (
               <View key={shoe.id} style={[styles.card, { backgroundColor: t.surfaceAlt }]}>
                 <View style={styles.rowBetween}>
+                  <ShoeArt brand={shoe.brand} model={shoe.model} color={shoe.color} width={64} style={{ opacity: 0.6 }} />
                   <Txt style={{ fontWeight: '600', flex: 1 }}>
                     {shoe.brand} {shoe.model}
                   </Txt>
@@ -133,7 +149,7 @@ function AddShoe({
   onCancel,
 }: {
   first: boolean;
-  onAdd: (s: { brand: string; model: string; nickname?: string; lifeKm: number; startKm: number }, makeDefault: boolean) => void;
+  onAdd: (s: { brand: string; model: string; nickname?: string; lifeKm: number; startKm: number; color?: string }, makeDefault: boolean) => void;
   onCancel?: () => void;
 }) {
   const t = useTheme();
@@ -144,6 +160,7 @@ function AddShoe({
   const [startKm, setStartKm] = useState('0');
   const [lifeKm, setLifeKm] = useState(String(DEFAULT_LIFE_KM));
   const [makeDefault, setMakeDefault] = useState(true);
+  const [color, setColor] = useState<string | null>(null);
 
   const models = SHOE_CATALOG.filter((m) => m.brand === brand);
   const modelName = model === 'autre' ? otherModel.trim() : model?.model;
@@ -232,6 +249,30 @@ function AddShoe({
       {model === 'autre' && <Field label={brand === 'Autre' ? 'Marque et modèle' : 'Modèle'} value={otherModel} onChange={setOtherModel} placeholder="ex. Mach 6" />}
       {modelName ? (
         <>
+          <View style={[styles.artBox, { backgroundColor: t.surfaceAlt }]}>
+            <ShoeArt brand={brand} model={modelName} color={color ?? undefined} width={220} />
+          </View>
+          <Txt variant="caption" muted>
+            Coloris
+          </Txt>
+          <View style={styles.wrap}>
+            {COLORWAYS.map((c) => {
+              const on = (color ?? defaultColorway(brand, modelName)) === c.id;
+              return (
+                <Pressable
+                  key={c.id}
+                  accessibilityRole="radio"
+                  accessibilityLabel={c.label}
+                  accessibilityState={{ selected: on }}
+                  onPress={() => setColor(c.id)}
+                  style={[styles.swatch, { borderColor: on ? t.accent : t.line }]}>
+                  <View style={[styles.swatchIn, { backgroundColor: c.upper }]}>
+                    <View style={[styles.swatchAccent, { backgroundColor: c.accent }]} />
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
           <Field label="Surnom (facultatif)" value={nickname} onChange={setNickname} placeholder="ex. les rouges" />
           <View style={styles.row}>
             <View style={{ flex: 1 }}>
@@ -274,6 +315,7 @@ function AddShoe({
                   nickname: nickname.trim() ? nickname.trim().slice(0, 24) : undefined,
                   lifeKm: Math.round(life!),
                   startKm: Math.round(start),
+                  color: color ?? defaultColorway(brand, modelName!),
                 },
                 first || makeDefault,
               )
@@ -330,6 +372,10 @@ const styles = StyleSheet.create({
   action: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4 },
   sectionTitle: { fontSize: 13, fontWeight: '600', paddingHorizontal: 4 },
   pill: { borderRadius: 999, paddingHorizontal: 14, minHeight: 34, justifyContent: 'center' },
+  artBox: { borderRadius: 16, alignItems: 'center', justifyContent: 'center', paddingVertical: Spacing.s },
+  swatch: { width: 36, height: 36, borderRadius: 18, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  swatchIn: { width: 26, height: 26, borderRadius: 13, overflow: 'hidden', justifyContent: 'flex-end' },
+  swatchAccent: { height: 9 },
   modelRow: { flexDirection: 'row', alignItems: 'center', borderRadius: 12, borderWidth: 1, paddingHorizontal: Spacing.m, minHeight: 44, gap: Spacing.s },
   field: { borderRadius: 12, paddingHorizontal: Spacing.m, paddingVertical: Spacing.s },
   input: { fontSize: 16, fontWeight: '600', paddingVertical: 4 },
