@@ -39,7 +39,10 @@ if smtp['SMTP_HOST'] and smtp['SMTP_PASS'] and smtp['SMTP_SENDER']:
     })
     print('Serveur d’envoi :', smtp['SMTP_HOST'], '· expéditeur :', '…@' + smtp['SMTP_SENDER'].split('@')[-1])
 else:
+    # Sans serveur d'envoi, Supabase (offre gratuite) interdit de modifier les modèles : on s'arrête là.
     print('Pas de secrets SMTP : envoi Supabase par défaut (membres de l’équipe uniquement, 2 e-mails par heure).')
+    print('Ajoute SMTP_HOST, SMTP_USER, SMTP_PASS et SMTP_SENDER dans GitHub pour envoyer les codes à tout le monde.')
+    sys.exit(0)
 
 req = urllib.request.Request(
     f'https://api.supabase.com/v1/projects/{ref}/config/auth',
